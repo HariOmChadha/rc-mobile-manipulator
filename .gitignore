@@ -4,3 +4,4 @@ __pycache__/
 esp32_controller/.pio/
 esp32_controller/.vscode/
 lerobot/
+data/

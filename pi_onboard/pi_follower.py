@@ -3,27 +3,34 @@ import zmq
 import time
 import json
 import os
+import numpy as np
+
+# --- 1. IMPORT LEROBOT FOLLOWER ---
+from lerobot.robots.so_follower import SO100Follower, SO100FollowerConfig
 
 CAM_INDEX = 0
 DATASET_DIR = "training_dataset"
 
-def set_follower_joints(joints):
-    # Placeholder: Pass angles to Follower arm motors
-    pass
+# Set this to the USB port the Follower arm is plugged into on the Pi
+FOLLOWER_PORT = "/dev/ttyACM0" 
 
 def set_chassis_velocity(rc_state):
-    # Placeholder: Pass throttle/steer to RC car motors via Serial/I2C/PWM
+    # Pass throttle/steer to RC car motors
     pass
 
 def main():
     cap = cv2.VideoCapture(CAM_INDEX)
-    if not cap.isOpened():
-        print("Warning: Camera not found! Check USB connection.")
-        
+    
     context = zmq.Context()
     socket = context.socket(zmq.REP)
     socket.bind("tcp://*:5555")
-    print("Pi Follower ready. Waiting for laptop commands...")
+    
+    # --- 2. CONNECT LEROBOT FOLLOWER ---
+    print("Connecting to Follower arm...")
+    robot_cfg = SO100FollowerConfig(port=FOLLOWER_PORT)
+    follower = SO100Follower(robot_cfg)
+    follower.connect()
+    print("Follower arm connected and calibrated!")
     
     current_episode = None
     log_file = None
@@ -34,26 +41,28 @@ def main():
             msg = socket.recv_json()
             cmd = msg.get("command")
             
-            # 1. Always apply physical movements instantly
+            # --- 3. APPLY PHYSICAL MOVEMENTS ---
             if "leader_joints" in msg:
-                set_follower_joints(msg["leader_joints"])
+                # Convert the incoming Python list/dict back into the format LeRobot expects
+                action = msg["leader_joints"]
+                if isinstance(action, list):
+                    action = np.array(action, dtype=np.float32)
+                
+                # Send the joint angles directly to the motors!
+                follower.send_action(action)
+                
             if "rc_state" in msg:
                 set_chassis_velocity(msg["rc_state"])
 
-            # 2. Handle Recording state
             if cmd == "record":
                 ep_name = msg.get("episode")
-                
-                # Open new folder if starting an episode
                 if current_episode != ep_name:
                     current_episode = ep_name
                     frame_idx = 0
                     ep_dir = f"{DATASET_DIR}/{ep_name}"
                     os.makedirs(f"{ep_dir}/images", exist_ok=True)
                     log_file = open(f"{ep_dir}/telemetry.jsonl", "a")
-                    print(f"Started recording: {ep_name}")
 
-                # Snap and save photo
                 ret, frame = cap.read()
                 timestamp = time.time()
                 
@@ -61,7 +70,6 @@ def main():
                     img_name = f"frame_{frame_idx:04d}.jpg"
                     cv2.imwrite(f"{DATASET_DIR}/{current_episode}/images/{img_name}", frame)
                     
-                    # Log state
                     log_entry = {
                         "timestamp": timestamp,
                         "image_file": img_name,
@@ -73,23 +81,20 @@ def main():
                     
                 socket.send_json({"status": "recorded"})
 
-            # 3. Handle Stop Recording state
             elif cmd == "stop_recording":
                 if log_file and not log_file.closed:
                     log_file.close()
-                    print(f"Saved {frame_idx} frames. Episode complete.")
                 current_episode = None
                 socket.send_json({"status": "file_closed"})
                 
-            # 4. Handle Idle state (Motors were already zeroed in step 1)
             elif cmd == "idle":
                 socket.send_json({"status": "zero_velocity_applied"})
 
     finally:
         cap.release()
+        follower.disconnect() # Safely release the arm motors
         if log_file and not log_file.closed:
             log_file.close()
-        print("Pi hardware released cleanly.")
 
 if __name__ == "__main__":
     main()

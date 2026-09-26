@@ -2,86 +2,89 @@ import zmq
 import serial
 import time
 import json
+import numpy as np
 
-PI_IP_ADDRESS = "10.42.0.181" # The Ethernet IP
+# --- 1. IMPORT LEROBOT LEADER ---
+from lerobot.teleoperators.so_leader import SO100Leader, SO100LeaderConfig
+
+PI_IP_ADDRESS = "10.42.0.181"
 ESP32_PORT = '/dev/ttyUSB0'
 BAUD_RATE = 115200
 
-def get_leader_joints():
-    # Placeholder: Read your Leader arm hardware here
-    return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+# Set this to the USB port your Leader arm is plugged into on the laptop
+LEADER_PORT = "/dev/ttyACM0" 
 
 def main():
     context = zmq.Context()
     socket = context.socket(zmq.REQ)
-    print(f"Connecting to Pi at {PI_IP_ADDRESS}...")
     socket.connect(f"tcp://{PI_IP_ADDRESS}:5555")
+    
+    # --- 2. CONNECT LEROBOT LEADER ---
+    print("Connecting to Leader arm...")
+    leader_cfg = SO100LeaderConfig(port=LEADER_PORT)
+    leader = SO100Leader(leader_cfg)
+    leader.connect()
+    print("Leader arm connected and calibrated!")
     
     try:
         esp32 = serial.Serial(ESP32_PORT, BAUD_RATE, timeout=0.1)
-        print("ESP32 connected.")
     except Exception:
         esp32 = None
-        print("Warning: ESP32 not found. Running mock RC commands.")
 
     episode_count = 0
 
     while True:
         ep_name = f"episode_{episode_count:03d}"
         
-        # 1. IDLE STATE
         try:
             input(f"\n[IDLE] Press ENTER to start recording {ep_name} (or double Ctrl+C to quit)...")
         except KeyboardInterrupt:
-            print("\nExiting program.")
             break
 
-        print(f"\n[RECORDING] {ep_name} is active! Drive the robot.")
-        print("Press Ctrl+C to STOP recording this episode.")
+        print(f"\n[RECORDING] {ep_name} is active!")
         
-        # 2. ACTIVE STATE
         try:
             while True:
-                # Read ESP32 steering
                 rc_state = {"throttle": 0.0, "steer": 0.0}
                 if esp32 and esp32.in_waiting > 0:
                     try:
-                        line = esp32.readline().decode('utf-8').strip()
-                        rc_state = json.loads(line)
+                        rc_state = json.loads(esp32.readline().decode('utf-8').strip())
                     except:
                         pass
                 
-                # Send frame data to Pi
+                # --- 3. READ LEADER JOINTS ---
+                action = leader.get_action()
+                
+                # LeRobot returns tensors/numpy arrays. Convert to a standard list so it can be sent via JSON.
+                if hasattr(action, "tolist"):
+                    leader_joints = action.tolist()
+                elif isinstance(action, dict):
+                    leader_joints = {k: (v.tolist() if hasattr(v, "tolist") else v) for k, v in action.items()}
+                else:
+                    leader_joints = action
+
                 payload = {
                     "command": "record",
                     "episode": ep_name,
                     "rc_state": rc_state,
-                    "leader_joints": get_leader_joints()
+                    "leader_joints": leader_joints
                 }
                 
                 socket.send_json(payload)
-                socket.recv_json() # Wait for Pi to finish saving
-                
-                time.sleep(0.033) # Run at ~30Hz
+                socket.recv_json() 
+                time.sleep(0.033)
 
-        # 3. STOP STATE
         except KeyboardInterrupt:
             print(f"\n[STOPPED] Ending {ep_name}. Closing file on Pi...")
-            
-            # Step A: Stop recording cleanly
             socket.send_json({"command": "stop_recording"})
             socket.recv_json()
             
-            print("File safely saved. Zeroing out robot velocity...")
-            
-            # Step B: Apply hard brake to RC chassis and hold arm
+            # Send zero velocity. (We don't send arm coordinates here to let it rest)
             socket.send_json({
                 "command": "idle",
-                "rc_state": {"throttle": 0.0, "steer": 0.0},
-                "leader_joints": get_leader_joints()
+                "rc_state": {"throttle": 0.0, "steer": 0.0}
             })
             socket.recv_json()
-            
             episode_count += 1
 
 if __name__ == "__main__":
