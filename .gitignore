@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.csv
+esp32_controller/.pio/
+esp32_controller/.vscode/
+lerobot/

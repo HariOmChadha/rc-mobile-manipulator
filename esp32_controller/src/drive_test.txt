@@ -1,0 +1,37 @@
+#include <Arduino.h>
+
+const int steeringDAC = 25; 
+const int throttleDAC = 26; 
+
+void setup() {
+  // Set both to neutral (128) immediately so the car stays still
+  dacWrite(steeringDAC, 128);
+  dacWrite(throttleDAC, 128);
+  delay(2000); 
+}
+
+void loop() {
+  // 1. Sweep Steering Left
+  for(int i = 128; i >= 50; i -= 2) {
+    dacWrite(steeringDAC, i);
+    delay(20);
+  }
+  
+  // 2. Sweep Steering Right
+  for(int i = 50; i <= 200; i += 2) {
+    dacWrite(steeringDAC, i);
+    delay(20);
+  }
+  
+  // Return to Center
+  dacWrite(steeringDAC, 128);
+  delay(1000);
+
+  // 3. Pulse Throttle Forward (200) for half a second
+  dacWrite(throttleDAC, 200);
+  delay(500);
+  
+  // Return to Neutral and brake
+  dacWrite(throttleDAC, 128);
+  delay(2000);
+}
