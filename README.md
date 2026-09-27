@@ -11,8 +11,9 @@ and records an episode. No `socat` or virtual USB/serial ports are required.
 
 The RC car continues to use its existing handheld radio controller. The checked-in
 ESP32 firmware reads the handheld inputs, writes its DAC outputs to the remote PCB,
-and reports **steering,throttle** over USB. This software does not command the car's
-drive motors or turn the arm watchdog into a car emergency stop.
+and reports **steering,throttle** over USB. Recording uses manual control. The new `./robot infer` path can command DAC outputs
+through updated ESP32 firmware; see [INFERENCE.md](INFERENCE.md) for setup and limits.
+The arm watchdog is separate from the ESP32 watchdog.
 
 ## Try it now, without hardware
 

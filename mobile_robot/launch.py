@@ -26,9 +26,13 @@ def main():
             "ethernet",
             "benchmark",
             "classify",
+            "infer",
+            "rc-manual",
         ],
     )
-    args, extra = parser.parse_known_args()
+    # Let each subcommand own its flags, including --help.
+    args = parser.parse_args(sys.argv[1:2])
+    extra = sys.argv[2:]
     token_file = Path(".robot-token")
     if not os.environ.get("ROBOT_TOKEN") and token_file.exists():
         os.environ["ROBOT_TOKEN"] = token_file.read_text().strip()
@@ -57,9 +61,11 @@ def main():
         "cameras": "mobile_robot.camera_config",
         "benchmark": "mobile_robot.benchmark",
         "classify": "mobile_robot.review",
+        "infer": "mobile_robot.inference",
+        "rc-manual": "mobile_robot.car",
     }
     defaults = []
-    if args.command in ("check", "record", "benchmark"):
+    if args.command in ("check", "record", "benchmark", "infer"):
         defaults = ["--config", "config/laptop.local.json"]
         # Respect experiment configs supplied by the user when checking the address.
         supplied = argparse.ArgumentParser(add_help=False)

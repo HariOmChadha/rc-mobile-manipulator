@@ -67,7 +67,9 @@ def validate_episode(path):
     }
 
 
-def run_smoke(duration, output, pi_config="config/pi.json", laptop_config="config/laptop.json"):
+def run_smoke(
+    duration, output, pi_config="config/pi.json", laptop_config="config/laptop.json", inference=False
+):
     run_dir = Path(output).resolve() / f"run_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
     run_dir.mkdir(parents=True)
     host = load_config(pi_config)
@@ -111,6 +113,38 @@ def run_smoke(duration, output, pi_config="config/pi.json", laptop_config="confi
         (run_dir / "check.log").write_text(check.stdout + check.stderr)
         if check.returncode:
             raise RuntimeError(f"Preflight failed; inspect {run_dir / 'check.log'}")
+        if inference:
+            action_log = run_dir / "actions.jsonl"
+            inference_run = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "mobile_robot.inference",
+                    "--mock",
+                    "--config",
+                    str(run_dir / "laptop.json"),
+                    "--duration",
+                    str(duration),
+                    "--output",
+                    str(action_log),
+                ],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=duration + 30,
+            )
+            (run_dir / "inference.log").write_text(inference_run.stdout + inference_run.stderr)
+            if inference_run.returncode:
+                raise RuntimeError(f"Inference failed; inspect {run_dir / 'inference.log'}")
+            rows = [json.loads(line) for line in action_log.read_text().splitlines()]
+            if not any(
+                row["mode"] == "prediction" and row["steer"] == 123 and row["throttle"] == 101 for row in rows
+            ):
+                raise RuntimeError("Mock policy did not produce arm + DAC commands")
+            report = {"passed": True, "mode": "mock_inference", **json.loads(inference_run.stdout)}
+            (run_dir / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+            print(json.dumps(report, indent=2))
+            return report
         recording = subprocess.run(
             [*base, "--duration", str(duration), "--output", str(run_dir / "dataset")],
             env=env,
@@ -172,10 +206,13 @@ def main():
     parser.add_argument("--output", default="data/validation")
     parser.add_argument("--pi-config", default="config/pi.json")
     parser.add_argument("--laptop-config", default="config/laptop.json")
+    parser.add_argument(
+        "--infer", action="store_true", help="Test model-to-arm-and-car control using a mock policy"
+    )
     args = parser.parse_args()
     if not 1 <= args.duration <= 3600:
         parser.error("--duration must be between 1 and 3600 seconds")
-    run_smoke(args.duration, args.output, args.pi_config, args.laptop_config)
+    run_smoke(args.duration, args.output, args.pi_config, args.laptop_config, args.infer)
 
 
 if __name__ == "__main__":

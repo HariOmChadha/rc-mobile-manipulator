@@ -1,0 +1,37 @@
+{
+  "state_names": [
+    "shoulder_pan.pos",
+    "shoulder_lift.pos",
+    "elbow_flex.pos",
+    "wrist_flex.pos",
+    "wrist_roll.pos",
+    "gripper.pos",
+    "steer",
+    "throttle"
+  ],
+  "action_names": [
+    "shoulder_pan.pos",
+    "shoulder_lift.pos",
+    "elbow_flex.pos",
+    "wrist_flex.pos",
+    "wrist_roll.pos",
+    "gripper.pos",
+    "steer",
+    "throttle"
+  ],
+  "camera_map": {
+    "observation.images.scene": "scene",
+    "observation.images.wrist": "wrist",
+    "observation.images.car": "car"
+  },
+  "units": "normalized_minus100_100_gripper_0_100_and_rc_dac_0_255",
+  "mapping_confirmed": false,
+  "neutral_steer": null,
+  "neutral_throttle": null,
+  "max_inference_s": 5.0,
+  "task": "Drive to the object, pick it up, drive to the bin, and drop it in the bin.",
+  "fps": 30,
+  "execution_horizon": 10,
+  "adapter": null,
+  "checkpoint": null
+}

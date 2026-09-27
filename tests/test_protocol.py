@@ -71,6 +71,8 @@ def test_actual_firmware_output_with_distinct_analog_inputs(tmp_path):
 #include <stdexcept>
 struct SerialStub {
  void begin(int) {}
+ int available() { return 0; }
+ int read() { return 0; }
  template<class T> void print(T v) { std::cout << v; }
  template<class T> void println(T v) { std::cout << v << "\\n"; }
 };
@@ -78,19 +80,30 @@ inline SerialStub Serial;
 inline void analogReadResolution(int) {}
 inline int analogRead(int pin) { return pin == 34 ? 1600 : 3200; }
 inline void dacWrite(int pin, int value) {
- if ((pin == 25 && value != 100) || (pin == 26 && value != 200))
+ if ((pin == 25 && value != 100) || (pin == 26 && value != 145))
    throw std::runtime_error("wrong DAC output");
 }
 inline void delay(int) {}
+inline unsigned long millis() { return 0; }
 """)
     firmware = Path("esp32_controller/src/main.cpp").resolve()
     (tmp_path / "test.cpp").write_text(f'#include "{firmware}"\nint main() {{ setup(); loop(); }}\n')
     binary = tmp_path / "firmware_test"
     subprocess.run(
-        [compiler, "-std=c++17", "-I", str(tmp_path), str(tmp_path / "test.cpp"), "-o", str(binary)],
+        [
+            compiler,
+            "-std=c++17",
+            "-I",
+            str(tmp_path),
+            "-I",
+            "esp32_controller/include",
+            str(tmp_path / "test.cpp"),
+            "-o",
+            str(binary),
+        ],
         check=True,
         capture_output=True,
     )
     line = subprocess.check_output([str(binary)], text=True)
-    assert line == "100,200\n"
-    assert parse_rc_line(line) == {"steer": 100, "throttle": 200}
+    assert line == "100,145\n"
+    assert parse_rc_line(line) == {"steer": 100, "throttle": 145}
