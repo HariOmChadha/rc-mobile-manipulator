@@ -9,6 +9,9 @@ if [[ ! -x .venv/bin/python ]]; then
 fi
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -r requirements-wireless.txt
+# The Pi has no CUDA GPU. Install compatible CPU wheels first so LeRobot's
+# general dependencies do not select the large NVIDIA ARM64 distributions.
+.venv/bin/python -m pip install 'torch==2.11.0+cpu' 'torchvision==0.26.0+cpu' --index-url https://download.pytorch.org/whl/cpu
 .venv/bin/python -m pip install 'lerobot[feetech] @ git+https://github.com/huggingface/lerobot.git@e595b7902714ba51f91e47523f66f89c5181b649'
 .venv/bin/python -m pip check
 .venv/bin/python -c 'from lerobot.robots.so_follower import SO101Follower; import cv2, zmq, serial; print("Pi software imports passed. Run ./robot devices, confirm config/pi.local.json, then ./robot pi.")'
