@@ -186,8 +186,42 @@ pose to avoid a large initial target change. Then explicitly enable motion:
 python -m mobile_robot.client --config config/laptop.local.json --enable-motion
 ```
 
-Ctrl+C ends the episode and sends a hold request. Run the command again for the
-next episode; each directory is unique. `--duration 20` records one timed episode.
+Ctrl+C ends the episode and sends a hold request. Once the devices are closed and
+all pending images and telemetry are saved, the laptop asks whether the run was
+good or bad. Enter `g` or `b`; Enter alone, Ctrl+C at the prompt, or a noninteractive
+terminal leaves it unreviewed. Run the same command again for the next episode;
+each directory is unique. `--duration 20` records one timed episode and then asks
+the same question.
+
+Real recordings now default to `training_dataset/` on the laptop:
+
+```text
+training_dataset/
+  good/episode_.../
+  bad/episode_.../
+  unreviewed/episode_.../
+```
+
+Each episode contains `metadata.json`, `telemetry.jsonl`, and `images/`. Metadata
+includes the quality label and recording completion status. Recording begins in
+`unreviewed`; classification moves the entire closed episode without changing its
+relative image references. These are raw training captures, not yet a converted
+LeRobot training dataset. Failed recordings remain unreviewed with error details.
+The independently controlled RC car must still be stopped with its controller.
+
+Existing captures under `data/episode_*` remain where they were. Classify an older
+closed episode or revise a label with:
+
+```bash
+./robot classify data/episode_YOUR_RUN good
+./robot classify training_dataset/good/episode_YOUR_RUN bad
+```
+
+`--output PATH` overrides the dataset root. `--quality good|bad|unreviewed` skips
+the question for automated runs; use `--quality ask` to explicitly enable it.
+Mock recordings stay under `data/mock-recordings` by default and never prompt
+unless `--quality ask` is supplied. Error-marked episodes cannot be labeled good.
+
 There is no automatic reconnect/replay of motion after a fault.
 
 The control token prevents accidental unauthorized clients but is **not encrypted**.

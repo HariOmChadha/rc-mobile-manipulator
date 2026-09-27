@@ -25,6 +25,7 @@ def main():
             "wifi",
             "ethernet",
             "benchmark",
+            "classify",
         ],
     )
     args, extra = parser.parse_known_args()
@@ -55,6 +56,7 @@ def main():
         "test": "pytest",
         "cameras": "mobile_robot.camera_config",
         "benchmark": "mobile_robot.benchmark",
+        "classify": "mobile_robot.review",
     }
     defaults = []
     if args.command in ("check", "record", "benchmark"):

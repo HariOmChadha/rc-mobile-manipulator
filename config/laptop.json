@@ -17,5 +17,5 @@
   "cameras": [
     {"name": "scene", "device": 0, "width": 640, "height": 480, "fps": 15, "fourcc": "MJPG", "jpeg_quality": 80}
   ],
-  "output_dir": "data"
+  "output_dir": "training_dataset"
 }

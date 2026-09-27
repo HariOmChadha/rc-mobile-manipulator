@@ -175,6 +175,19 @@ one five-second episode and ends the arm session. If checks fail, fix the report
 device/calibration/network issue before retrying. The arm watchdog does not stop
 the separately controlled RC car.
 
+For each subsequent recording, keep the Pi server running and use this on the laptop:
+
+```bash
+cd /home/czarhc/act-athon && ./robot record --enable-motion
+```
+
+Press Ctrl+C to finish and save, then enter `g` for good or `b` for bad. Episodes go
+to `training_dataset/good/episode_...` or `training_dataset/bad/episode_...` on the
+laptop. Enter alone leaves the run in `training_dataset/unreviewed/episode_...`.
+The prompt appears after arm-session shutdown and file flushing. Repeat the same
+command for a new episode. Earlier recordings in `data/episode_*` are retained;
+use `./robot classify EPISODE_PATH good` (or `bad`) to file one later.
+
 For a staged arm-only test, temporarily set `cameras: []` in both local configs
 and `remote_cameras: []` in the laptop config. Restore one camera at a time.
 

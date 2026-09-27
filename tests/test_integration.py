@@ -1,6 +1,9 @@
 """Real TCP sockets, separate Pi process, real JPEG encode/decode and dataset writes."""
 
 import json
+import os
+import pty
+import signal
 import socket
 import subprocess
 import sys
@@ -101,6 +104,83 @@ def test_three_camera_recording_over_tcp(network):
         assert remote.call("status")["reason"] == "client_stop"
     finally:
         remote.close()
+
+
+@pytest.mark.parametrize("answer,quality", [(b"g\n", "good"), (b"b\n", "bad")])
+def test_ctrl_c_flushes_and_stops_before_review(network, answer, quality):
+    cfg, _, path = network
+    cfg_path = path / "laptop.json"
+    cfg_path.write_text(json.dumps(cfg))
+    root = path / "training_dataset"
+    master, slave = pty.openpty()
+    log_path = path / "record.log"
+    with log_path.open("w") as log:
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "mobile_robot.client",
+                "--mock",
+                "--quality",
+                "ask",
+                "--config",
+                str(cfg_path),
+                "--output",
+                str(root),
+            ],
+            stdin=slave,
+            stdout=log,
+            stderr=log,
+        )
+        os.close(slave)
+        try:
+            deadline = time.monotonic() + 12
+            while time.monotonic() < deadline:
+                files = list(root.glob("unreviewed/episode_*/telemetry.jsonl"))
+                if files and len(files[0].read_text().splitlines()) >= 5:
+                    break
+                assert proc.poll() is None, log_path.read_text()
+                time.sleep(0.03)
+            else:
+                pytest.fail(log_path.read_text())
+            proc.send_signal(signal.SIGINT)
+            deadline = time.monotonic() + 12
+            while "Was this run good or bad?" not in log_path.read_text():
+                assert proc.poll() is None, log_path.read_text()
+                assert time.monotonic() < deadline, log_path.read_text()
+                time.sleep(0.03)
+            # Review cannot keep the robot session or the dataset writer active.
+            remote = Remote(cfg["control_endpoint"], "integration-test")
+            try:
+                state = remote.call("status")
+                assert state["reason"] == "client_stop"
+                assert state["session"] is None
+            finally:
+                remote.close()
+            metadata = json.loads((files[0].parent / "metadata.json").read_text())
+            rows = [json.loads(line) for line in files[0].read_text().splitlines()]
+            assert metadata["recording_status"] == "complete"
+            assert metadata["rows"] == len(rows) >= 5
+            os.write(master, answer)
+            assert proc.wait(timeout=10) == 0, log_path.read_text()
+            episodes = list(root.glob(f"{quality}/episode_*"))
+            assert len(episodes) == 1
+            assert not list(root.glob("unreviewed/episode_*"))
+            assert json.loads((episodes[0] / "metadata.json").read_text())["quality"] == quality
+            assert (episodes[0] / "telemetry.jsonl").read_text().splitlines() == [
+                json.dumps(row) for row in rows
+            ]
+            for row in rows:
+                for camera in row["images"].values():
+                    frame = cv2.imdecode(
+                        np.frombuffer((episodes[0] / camera["file"]).read_bytes(), np.uint8), cv2.IMREAD_COLOR
+                    )
+                    assert frame.shape == (120, 160, 3)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=5)
+            os.close(master)
 
 
 @pytest.mark.parametrize("network", ["read-only"], indirect=True)

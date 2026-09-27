@@ -25,5 +25,5 @@
       "label": "scene-wide-720p"
     }
   ],
-  "output_dir": "data"
+  "output_dir": "training_dataset"
 }

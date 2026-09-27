@@ -8,6 +8,45 @@ import uuid
 from pathlib import Path
 
 
+def update_metadata(episode, **fields):
+    path = Path(episode) / "metadata.json"
+    metadata = json.loads(path.read_text())
+    metadata.update(fields)
+    temporary = path.with_name(f".metadata-{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(json.dumps(metadata, indent=2, allow_nan=False) + "\n")
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def classify_episode(episode, quality, root):
+    """Move a closed episode intact, preserving all relative image references."""
+    if quality not in ("good", "bad", "unreviewed"):
+        raise ValueError("Quality must be good, bad or unreviewed")
+    source = Path(episode).resolve()
+    metadata = json.loads((source / "metadata.json").read_text())
+    if metadata.get("recording_status") == "recording":
+        raise ValueError("Episode is still marked as recording; do not move an active recording")
+    if not (source / "telemetry.jsonl").is_file():
+        raise ValueError("Episode has no telemetry file")
+    if quality == "good" and metadata.get("recording_status") == "error":
+        raise ValueError("Recording ended with an error; keep it unreviewed or classify it as bad")
+    destination = Path(root).resolve() / quality / source.name
+    if destination != source and destination.exists():
+        raise FileExistsError(f"Episode already exists: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    old_metadata = (source / "metadata.json").read_text()
+    update_metadata(source, quality=quality, classified_at=time.time())
+    try:
+        if destination != source:
+            source.rename(destination)
+    except OSError:
+        (source / "metadata.json").write_text(old_metadata)
+        raise
+    return destination
+
+
 class Recorder:
     def __init__(self, root, metadata, *, max_queue=60):
         self.path = Path(root) / f"episode_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
