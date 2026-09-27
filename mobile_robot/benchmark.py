@@ -38,11 +38,16 @@ def run(cfg, *, duration=30, output="data/benchmarks", mock=False):
     rows = []
     failure = None
     started = None
+    calibration = {}
     try:
         state = remote.call("status")
         if not state.get("read_only") or state["mock"] is not mock:
             raise RuntimeError("Start the Pi with ./robot pi --read-only (add --mock only for simulation)")
         leader = MockLeader() if mock else Arm(cfg["leader"], leader=True, read_only=True)
+        calibration = {
+            "leader": getattr(leader, "calibration_matches", None),
+            "follower": state.get("calibration_matches"),
+        }
         rc = RCReader(cfg.get("esp32_port"), mock=mock, reset_on_open=False)
         for camera in cfg["cameras"]:
             local.append(Capture(camera, mock=mock).start())
@@ -62,7 +67,15 @@ def run(cfg, *, duration=30, output="data/benchmarks", mock=False):
                     raise
                 time.sleep(0.02)
         recorder = Recorder(
-            folder, {"mock": mock, "read_only": True, "config": cfg, "purpose": "benchmark, no actions sent"}
+            folder,
+            {
+                "mock": mock,
+                "read_only": True,
+                "config": cfg,
+                "purpose": "benchmark, no actions sent",
+                "joint_units": "raw_encoder_counts",
+                "calibration_matches": calibration,
+            },
         )
         started = time.monotonic()
         while time.monotonic() - started < duration:
@@ -143,6 +156,8 @@ def run(cfg, *, duration=30, output="data/benchmarks", mock=False):
         "error": failure,
         "read_only": True,
         "mock": mock,
+        "joint_units": "raw_encoder_counts",
+        "calibration_matches": calibration,
         "control_endpoint": cfg["control_endpoint"],
         "requested_duration_s": duration,
         "elapsed_s": elapsed,

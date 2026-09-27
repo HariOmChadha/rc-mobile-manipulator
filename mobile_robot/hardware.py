@@ -57,7 +57,7 @@ class Arm:
             kwargs["calibration_dir"] = Path(config["calibration_dir"])
         self.device = cls(cfg_cls(**kwargs))
         try:
-            if not calibrate and not self.device.calibration:
+            if not calibrate and not read_only and not self.device.calibration:
                 raise RuntimeError(
                     f"Missing calibration: {self.device.calibration_fpath}. Run the calibrate command first."
                 )
@@ -67,7 +67,8 @@ class Arm:
                 self.device.bus.connect()
             else:
                 self.device.connect(calibrate=calibrate)
-            if not self.device.is_calibrated:
+            self.calibration_matches = self.device.is_calibrated
+            if not read_only and not self.calibration_matches:
                 raise RuntimeError(
                     "Motor calibration differs from the saved file. Run calibrate before teleoperation."
                 )
@@ -77,7 +78,10 @@ class Arm:
 
     def observe(self):
         if self.read_only:
-            return {f"{k}.pos": float(v) for k, v in self.device.bus.sync_read("Present_Position").items()}
+            return {
+                f"{k}.pos": float(v)
+                for k, v in self.device.bus.sync_read("Present_Position", normalize=False).items()
+            }
         data = self.device.get_action() if self.leader else self.device.get_observation()
         return {key: float(data[key]) for key in JOINTS}
 

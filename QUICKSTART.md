@@ -65,7 +65,7 @@ sequence, and tests the command-loss watchdog. Each run saves logs, images and a
 ## Benchmark connected hardware without movement
 
 On the Pi, run `./robot pi --read-only`. This opens the servo bus for reads only,
-checks its saved calibration, and streams the actual cameras. It does not change
+compares its saved calibration, and streams the actual cameras. It does not change
 motor configuration or torque, and rejects all control-session/action requests.
 Leave the arms in their current supported positions.
 
@@ -78,12 +78,14 @@ On the laptop:
 ./robot benchmark --duration 60 --output data/benchmarks/wifi
 ```
 
-The benchmark reads both arms' six joint positions, ESP32 steering/throttle
+The benchmark reads both arms' six raw encoder positions, ESP32 steering/throttle
 telemetry and all three cameras. It saves telemetry and images, decodes every
 saved JPEG, and reports sample frequency, request latency, camera capture rate,
 image age estimates and saved image bandwidth. Reports are under the requested
 output directory, including failure reports. Timeouts and stale frames fail the
-test; they are not silently skipped. This verifies observation delivery, not
+test; they are not silently skipped. Calibration matches are reported separately:
+raw encoder reads do not need calibrated joint conversion, but a calibration
+mismatch must be resolved before normal movement mode. This verifies observation delivery, not
 motion tracking or a car emergency stop. Opening the controller serial port
 requests DTR/RTS low to avoid resetting it; no control data is written to it.
 

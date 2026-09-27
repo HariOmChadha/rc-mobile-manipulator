@@ -87,7 +87,8 @@ class Controller:
             "state_timestamp": time.time(),
             "server_monotonic": self.clock(),
             "command_timeout_s": self.timeout,
-            "units": "normalized_minus100_100_gripper_0_100",
+            "units": "raw_encoder_counts" if self.read_only else "normalized_minus100_100_gripper_0_100",
+            "calibration_matches": getattr(self.arm, "calibration_matches", None),
         }
 
 

@@ -98,7 +98,12 @@ def test_read_only_adapter_never_configures_or_writes_torque(fake_lerobot, tmp_p
 
         self.bus.connect = connect
         self.bus.disconnect = disconnect
-        self.bus.sync_read = lambda register: {key.removesuffix(".pos"): 12 for key in JOINTS}
+
+        def read(register, *, normalize):
+            assert normalize is False
+            return {key.removesuffix(".pos"): 12 for key in JOINTS}
+
+        self.bus.sync_read = read
         self.is_calibrated = calibrated
 
     monkeypatch.setattr(cls, "__init__", init)
@@ -106,16 +111,13 @@ def test_read_only_adapter_never_configures_or_writes_torque(fake_lerobot, tmp_p
     monkeypatch.setattr(
         cls, "disconnect", lambda *args: pytest.fail("Must not use torque-changing disconnect")
     )
-    if not calibrated:
-        with pytest.raises(RuntimeError, match="calibration differs"):
-            Arm({"port": "/fake", "id": "test", "calibration_dir": str(tmp_path)}, read_only=True)
-    else:
-        arm = Arm({"port": "/fake", "id": "test", "calibration_dir": str(tmp_path)}, read_only=True)
-        assert arm.observe() == dict.fromkeys(JOINTS, 12)
-        assert arm.hold() == dict.fromkeys(JOINTS, 12)
-        with pytest.raises(RuntimeError, match="Read-only"):
-            arm.send(dict.fromkeys(JOINTS, 0))
-        arm.close()
+    arm = Arm({"port": "/fake", "id": "test", "calibration_dir": str(tmp_path)}, read_only=True)
+    assert arm.calibration_matches is calibrated
+    assert arm.observe() == dict.fromkeys(JOINTS, 12)
+    assert arm.hold() == dict.fromkeys(JOINTS, 12)
+    with pytest.raises(RuntimeError, match="Read-only"):
+        arm.send(dict.fromkeys(JOINTS, 0))
+    arm.close()
     assert calls == ["bus-connect", "bus-close-without-torque"]
     assert instances[-1].sent is None
 
