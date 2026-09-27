@@ -11,12 +11,30 @@ from pathlib import Path
 def main():
     parser = argparse.ArgumentParser(description="Prepared robot commands (run from the repository root)")
     parser.add_argument(
-        "command", choices=["simulate", "check", "record", "pi", "devices", "test", "set-pi", "cameras"]
+        "command",
+        choices=[
+            "simulate",
+            "check",
+            "record",
+            "pi",
+            "devices",
+            "test",
+            "set-pi",
+            "cameras",
+            "network",
+            "wifi",
+            "ethernet",
+        ],
     )
     args, extra = parser.parse_known_args()
     token_file = Path(".robot-token")
     if not os.environ.get("ROBOT_TOKEN") and token_file.exists():
         os.environ["ROBOT_TOKEN"] = token_file.read_text().strip()
+    if args.command in ("network", "wifi", "ethernet"):
+        from .network import main as network_main
+
+        network_main(extra if args.command == "network" else [args.command, *extra])
+        return
     if args.command == "set-pi":
         if len(extra) != 1 or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]*", extra[0]):
             parser.error("Usage: ./robot set-pi PI_IP_OR_HOSTNAME")

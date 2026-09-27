@@ -8,6 +8,49 @@ calibrations are prepared. Commands below run from `/home/czarhc/act-athon`.
 The `robot` launcher selects the project Python environment and loads the private
 token automatically; no activation or manual token copying is needed.
 
+## Switch between Octopus Wi-Fi and Ethernet
+
+On the laptop, stop the current recording, then select the next connection:
+
+```bash
+./robot wifi       # Saved Pi address on Octopus
+./robot ethernet   # Saved Pi address on the Ethernet cable
+./robot network    # Show the selected addresses; does not test connectivity
+./robot check      # Check feedback and cameras with the Pi server running
+```
+
+Both addresses are prepared in the ignored `config/network.local.json` on this
+laptop. These commands change only the control/video endpoints in
+`config/laptop.local.json`, preserving your chosen cameras, calibration and
+recording settings. They do not switch the computer's Wi-Fi network or interrupt
+an existing recording. Connect both devices to Octopus before `./robot wifi`;
+plug in Ethernet before `./robot ethernet`. The Pi runs the same `./robot pi`
+command for both connections and does not need restarting to change transport.
+You can leave Ethernet attached while testing Wi-Fi: the selected Pi Wi-Fi IP
+uses the Wi-Fi route. Explicit `--config` arguments override the selected default.
+
+If DHCP changes the Pi address, update just that saved connection:
+
+```bash
+./robot wifi --host NEW_PI_WIFI_IP
+./robot ethernet --host NEW_PI_ETHERNET_IP
+```
+
+For a dummy run, start `./robot pi --mock` on the Pi, then run on the laptop:
+
+```bash
+./robot wifi
+./robot check --mock
+./robot record --mock --duration 10 --label wifi-test
+./robot ethernet
+./robot check --mock
+./robot record --mock --duration 10 --label ethernet-test
+```
+
+Stop the dummy Pi server before starting the real one. Camera selection is
+independent of transport: change just `wrist`, `car` or `scene` using the commands
+in [CAMERA_EXPERIMENTS.md](CAMERA_EXPERIMENTS.md), then use either connection.
+
 ## Test now without hardware
 
 ```bash
@@ -29,11 +72,14 @@ been transferred. All 71 tests passed on both the Pi and laptop.
 The live Ethernet dummy run passed: 299 control samples in 10 seconds, 29.85 Hz,
 1.09 ms p95 request latency, and 598 decoded JPEGs across three cameras (wrist
 1280x720, car and scene 640x480). The actual Pi's command-loss watchdog also passed.
-The live Wi-Fi run **did not pass**: it saved 455 samples before a request timeout
+The initial actor-labs Wi-Fi run **did not pass**: it saved 455 samples before a request timeout
 at about 20 seconds. Median latency was 18.7 ms and p95 was 89.1 ms among completed
 requests; these figures exclude the timed-out request. Wi-Fi power saving was
 disabled on both devices and the laptop used 5 GHz, but the Pi could only connect
-on 2.4 GHz. A stable network still needs validation before wireless motion tests.
+on 2.4 GHz. A later **Octopus ten-second dummy run passed** with both devices on
+2.4 GHz: 267 samples (26.7 Hz), 10.8 ms median and 46.0 ms p95 request latency,
+with 513 decoded JPEGs. This is a short connectivity test, not proof of sustained
+30 Hz or reliable operation with real cameras. Longer hardware validation remains.
 Synthetic cameras cannot verify real USB capture, image quality or worst-case
 video bandwidth. Detailed local reports are under `data/pi-validation/`.
 

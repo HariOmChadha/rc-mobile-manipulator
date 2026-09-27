@@ -19,6 +19,7 @@ def main():
             "config/pi.json",
             "config/pi.local.json",
             "config/laptop.json",
+            "config/network.json",
             "config/camera_profiles.json",
             "calibration/follower/my_follower_arm.json",
             "scripts/setup_pi.sh",

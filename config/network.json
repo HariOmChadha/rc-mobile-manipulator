@@ -1,0 +1,4 @@
+{
+  "wifi": {"host": "PI_WIFI_ADDRESS"},
+  "ethernet": {"host": "PI_ETHERNET_ADDRESS"}
+}
