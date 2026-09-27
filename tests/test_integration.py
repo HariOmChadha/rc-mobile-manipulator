@@ -44,7 +44,8 @@ def network(tmp_path, monkeypatch, request):
     host_path.write_text(json.dumps(host))
     log = (tmp_path / "server.log").open("w+")
     proc = subprocess.Popen(
-        [sys.executable, "-m", "mobile_robot.server", "--mock", "--config", str(host_path)],
+        [sys.executable, "-m", "mobile_robot.server", "--mock", "--config", str(host_path)]
+        + (["--read-only"] if getattr(request, "param", None) == "read-only" else []),
         stdout=log,
         stderr=log,
     )
@@ -100,6 +101,38 @@ def test_three_camera_recording_over_tcp(network):
         assert remote.call("status")["reason"] == "client_stop"
     finally:
         remote.close()
+
+
+@pytest.mark.parametrize("network", ["read-only"], indirect=True)
+def test_read_only_benchmark_over_tcp(network):
+    from mobile_robot.benchmark import run as benchmark
+
+    cfg, _, path = network
+    report = benchmark(cfg, duration=0.5, output=path / "benchmark", mock=True)
+    assert report["passed"]
+    assert report["samples"] >= 5
+    assert set(report["cameras"]) == {"wrist", "car", "scene"}
+    rows = [
+        json.loads(line) for line in (Path(report["episode"]) / "telemetry.jsonl").read_text().splitlines()
+    ]
+    assert all(row["follower_joints"] == dict.fromkeys(JOINTS, 0) for row in rows)
+    remote = Remote(cfg["control_endpoint"], "integration-test")
+    try:
+        assert remote.call("status")["session"] is None
+        with pytest.raises(RuntimeError, match="Read-only"):
+            remote.start(True)
+    finally:
+        remote.close()
+
+
+def test_benchmark_refuses_motion_enabled_server(network):
+    from mobile_robot.benchmark import run as benchmark
+
+    cfg, _, path = network
+    report = benchmark(cfg, duration=0.2, output=path / "benchmark", mock=True)
+    assert not report["passed"]
+    assert report["samples"] == 0
+    assert "read-only" in report["error"]
 
 
 def test_bad_json_wrong_token_and_recovery(network):

@@ -8,8 +8,9 @@ from .protocol import VERSION, validate_action
 
 
 class Controller:
-    def __init__(self, arm, token, *, timeout=0.5, mock=False, clock=time.monotonic):
+    def __init__(self, arm, token, *, timeout=0.5, mock=False, clock=time.monotonic, read_only=False):
         self.arm, self.token, self.timeout, self.mock, self.clock = arm, token, timeout, mock, clock
+        self.read_only = read_only
         self.session = None
         self.grant = None
         self.deadline = 0
@@ -24,7 +25,8 @@ class Controller:
         # Invalidate before hardware I/O, including when the hold itself fails.
         self.session = self.grant = None
         self.reason = reason
-        self.arm.hold()
+        if not self.read_only:
+            self.arm.hold()
 
     def handle(self, message):
         self.tick()
@@ -34,6 +36,8 @@ class Controller:
         if not isinstance(token, str) or not hmac.compare_digest(token, self.token):
             raise ValueError("Authentication failed")
         op = message.get("op")
+        if self.read_only and op != "status":
+            raise ValueError("Read-only server accepts status requests only")
         if op == "status":
             pass
         elif op == "start":
@@ -74,6 +78,7 @@ class Controller:
             "version": VERSION,
             "ok": True,
             "mock": self.mock,
+            "read_only": self.read_only,
             "session": self.session,
             "grant": self.grant,
             "seq": self.seq,

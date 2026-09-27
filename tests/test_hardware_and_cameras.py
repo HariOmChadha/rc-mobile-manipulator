@@ -78,6 +78,48 @@ def test_missing_calibration_fails_before_usb_connect(fake_lerobot, tmp_path):
     assert instances[-1].calibrate_argument is None
 
 
+@pytest.mark.parametrize("calibrated", [True, False])
+def test_read_only_adapter_never_configures_or_writes_torque(fake_lerobot, tmp_path, monkeypatch, calibrated):
+    cls, instances = fake_lerobot
+    original = cls.__init__
+    calls = []
+
+    def init(self, cfg):
+        original(self, cfg)
+
+        def connect():
+            self.bus.is_connected = True
+            calls.append("bus-connect")
+
+        def disconnect(*, disable_torque):
+            assert disable_torque is False
+            calls.append("bus-close-without-torque")
+            self.bus.is_connected = False
+
+        self.bus.connect = connect
+        self.bus.disconnect = disconnect
+        self.bus.sync_read = lambda register: {key.removesuffix(".pos"): 12 for key in JOINTS}
+        self.is_calibrated = calibrated
+
+    monkeypatch.setattr(cls, "__init__", init)
+    monkeypatch.setattr(cls, "connect", lambda *args, **kwargs: pytest.fail("Must not configure motors"))
+    monkeypatch.setattr(
+        cls, "disconnect", lambda *args: pytest.fail("Must not use torque-changing disconnect")
+    )
+    if not calibrated:
+        with pytest.raises(RuntimeError, match="calibration differs"):
+            Arm({"port": "/fake", "id": "test", "calibration_dir": str(tmp_path)}, read_only=True)
+    else:
+        arm = Arm({"port": "/fake", "id": "test", "calibration_dir": str(tmp_path)}, read_only=True)
+        assert arm.observe() == dict.fromkeys(JOINTS, 12)
+        assert arm.hold() == dict.fromkeys(JOINTS, 12)
+        with pytest.raises(RuntimeError, match="Read-only"):
+            arm.send(dict.fromkeys(JOINTS, 0))
+        arm.close()
+    assert calls == ["bus-connect", "bus-close-without-torque"]
+    assert instances[-1].sent is None
+
+
 @pytest.mark.parametrize("failure", ["fail_connect", "calibrated"])
 def test_usb_cleanup_after_connect_failure(fake_lerobot, tmp_path, failure):
     cls, instances = fake_lerobot

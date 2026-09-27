@@ -35,8 +35,12 @@ class MockArm:
 
 
 class Arm:
-    def __init__(self, config, *, leader=False, calibrate=False, max_step=5):
+    def __init__(self, config, *, leader=False, calibrate=False, max_step=5, read_only=False):
         self.device = None
+        self.read_only = read_only
+        self.leader = leader
+        if read_only and calibrate:
+            raise ValueError("Read-only mode cannot calibrate motors")
         if leader:
             from lerobot.teleoperators.so_leader import SO101Leader, SO101LeaderConfig
 
@@ -57,7 +61,12 @@ class Arm:
                 raise RuntimeError(
                     f"Missing calibration: {self.device.calibration_fpath}. Run the calibrate command first."
                 )
-            self.device.connect(calibrate=calibrate)
+            if read_only:
+                # Bus handshake only pings/reads registers. Device.connect() also
+                # configures motors and toggles torque, so never call it here.
+                self.device.bus.connect()
+            else:
+                self.device.connect(calibrate=calibrate)
             if not self.device.is_calibrated:
                 raise RuntimeError(
                     "Motor calibration differs from the saved file. Run calibrate before teleoperation."
@@ -65,23 +74,30 @@ class Arm:
         except BaseException:
             self.close()
             raise
-        self.leader = leader
 
     def observe(self):
+        if self.read_only:
+            return {f"{k}.pos": float(v) for k, v in self.device.bus.sync_read("Present_Position").items()}
         data = self.device.get_action() if self.leader else self.device.get_observation()
         return {key: float(data[key]) for key in JOINTS}
 
     def send(self, target):
+        if self.read_only:
+            raise RuntimeError("Read-only arm cannot send movement commands")
         return {k: float(v) for k, v in self.device.send_action(target).items()}
 
     def hold(self):
         position = self.observe()
-        self.send(position)
+        if not self.read_only:
+            self.send(position)
         return position
 
     def close(self):
         if self.device is not None and self.device.bus.is_connected:
-            self.device.disconnect()
+            if self.read_only:
+                self.device.bus.disconnect(disable_torque=False)
+            else:
+                self.device.disconnect()
 
 
 class MockLeader:
@@ -96,7 +112,7 @@ class MockLeader:
 class RCReader:
     """Nonblocking, bounded serial reads; preserves partial lines between polls."""
 
-    def __init__(self, port=None, *, mock=False):
+    def __init__(self, port=None, *, mock=False, reset_on_open=True):
         self.mock = mock
         self.serial = None
         self.buffer = b""
@@ -105,7 +121,13 @@ class RCReader:
         if port and not mock:
             import serial
 
-            self.serial = serial.Serial(port, 115200, timeout=0)
+            if reset_on_open:
+                self.serial = serial.Serial(port, 115200, timeout=0)
+            else:
+                self.serial = serial.Serial(None, 115200, timeout=0)
+                self.serial.dtr = self.serial.rts = False
+                self.serial.port = port
+                self.serial.open()
 
     def read(self):
         from .protocol import parse_rc_line

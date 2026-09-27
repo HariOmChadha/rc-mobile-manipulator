@@ -24,6 +24,7 @@ def main():
             "network",
             "wifi",
             "ethernet",
+            "benchmark",
         ],
     )
     args, extra = parser.parse_known_args()
@@ -53,9 +54,10 @@ def main():
         "devices": "mobile_robot.devices",
         "test": "pytest",
         "cameras": "mobile_robot.camera_config",
+        "benchmark": "mobile_robot.benchmark",
     }
     defaults = []
-    if args.command in ("check", "record"):
+    if args.command in ("check", "record", "benchmark"):
         defaults = ["--config", "config/laptop.local.json"]
         # Respect experiment configs supplied by the user when checking the address.
         supplied = argparse.ArgumentParser(add_help=False)

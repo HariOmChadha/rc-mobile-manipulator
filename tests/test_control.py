@@ -108,3 +108,15 @@ def test_stop_invalidates_even_when_hold_fails(rig):
     with pytest.raises(OSError):
         ctrl.handle(message("stop", session=start["session"]))
     assert ctrl.session is None
+
+
+def test_read_only_server_rejects_all_writes_and_never_holds():
+    arm = MockArm()
+    ctrl = Controller(arm, "secret", read_only=True)
+    assert ctrl.handle(message("status"))["read_only"] is True
+    for op in ("start", "action", "stop"):
+        with pytest.raises(ValueError, match="Read-only"):
+            ctrl.handle(message(op, mock=False))
+    ctrl.stop("server_shutdown")
+    assert arm.holds == 0
+    assert arm.actions == []

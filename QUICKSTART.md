@@ -62,6 +62,34 @@ an episode, decodes every saved JPEG, checks steering/throttle labels and comman
 sequence, and tests the command-loss watchdog. Each run saves logs, images and a
 `report.json` under `data/validation/`. It never opens real USB devices.
 
+## Benchmark connected hardware without movement
+
+On the Pi, run `./robot pi --read-only`. This opens the servo bus for reads only,
+checks its saved calibration, and streams the actual cameras. It does not change
+motor configuration or torque, and rejects all control-session/action requests.
+Leave the arms in their current supported positions.
+
+On the laptop:
+
+```bash
+./robot ethernet
+./robot benchmark --duration 60 --output data/benchmarks/ethernet
+./robot wifi
+./robot benchmark --duration 60 --output data/benchmarks/wifi
+```
+
+The benchmark reads both arms' six joint positions, ESP32 steering/throttle
+telemetry and all three cameras. It saves telemetry and images, decodes every
+saved JPEG, and reports sample frequency, request latency, camera capture rate,
+image age estimates and saved image bandwidth. Reports are under the requested
+output directory, including failure reports. Timeouts and stale frames fail the
+test; they are not silently skipped. This verifies observation delivery, not
+motion tracking or a car emergency stop. Opening the controller serial port
+requests DTR/RTS low to avoid resetting it; no control data is written to it.
+
+Stop the read-only Pi server before the later movement test and start `./robot pi`
+normally. Then run `./robot check` before `./robot record --enable-motion`.
+
 ## When the Pi is available
 
 The connected Pi has now been prepared at `/home/pi/rc-mobile-manipulator`

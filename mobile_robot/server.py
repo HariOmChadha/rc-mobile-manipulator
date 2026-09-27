@@ -21,7 +21,7 @@ def get_token(mock=False):
     return token
 
 
-def serve(cfg, *, mock=False, stop_event=None, ready=None):
+def serve(cfg, *, mock=False, stop_event=None, ready=None, read_only=False):
     import zmq
 
     stop_event = stop_event or threading.Event()
@@ -37,9 +37,9 @@ def serve(cfg, *, mock=False, stop_event=None, ready=None):
         arm = (
             MockArm(cfg["max_relative_target"])
             if mock
-            else Arm(cfg["follower"], max_step=cfg["max_relative_target"])
+            else Arm(cfg["follower"], max_step=cfg["max_relative_target"], read_only=read_only)
         )
-        controller = Controller(arm, token, timeout=cfg["command_timeout_s"], mock=mock)
+        controller = Controller(arm, token, timeout=cfg["command_timeout_s"], mock=mock, read_only=read_only)
         for camera in cfg["cameras"]:
             captures.append(Capture(camera, mock=mock).start())
         publisher = Publisher(cfg["video_bind"], captures).start()
@@ -89,13 +89,18 @@ def main():
     parser = argparse.ArgumentParser(description="SO101 Pi host: local arm USB, independent camera streams")
     parser.add_argument("--config", default="config/pi.json")
     parser.add_argument("--mock", action="store_true", help="Synthetic arm/cameras; never touches USB")
+    parser.add_argument(
+        "--read-only",
+        action="store_true",
+        help="Read real hardware without configuring motors or changing torque; reject movement commands",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     stop = threading.Event()
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
     try:
-        serve(load_config(args.config), mock=args.mock, stop_event=stop)
+        serve(load_config(args.config), mock=args.mock, stop_event=stop, read_only=args.read_only)
     except (ValueError, OSError, RuntimeError, ImportError, json.JSONDecodeError) as error:
         parser.exit(1, f"Pi startup/runtime error: {error}\n")
 
