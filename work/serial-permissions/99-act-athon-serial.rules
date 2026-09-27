@@ -1,0 +1,3 @@
+# Allow this workstation's robot operator to access only these two USB serial devices.
+SUBSYSTEM=="tty", ENV{ID_SERIAL}=="1a86_USB_Single_Serial_5B7A000012", OWNER="czarhc", MODE="0660"
+SUBSYSTEM=="tty", ENV{ID_SERIAL}=="Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001", OWNER="czarhc", MODE="0660"
