@@ -1,0 +1,29 @@
+{
+  "control_bind": "tcp://0.0.0.0:5555",
+  "video_bind": "tcp://0.0.0.0:5556",
+  "command_timeout_s": 0.5,
+  "request_timeout_s": 0.3,
+  "max_relative_target": 5.0,
+  "follower": {
+    "port": "/dev/ttyACM0",
+    "id": "my_follower_arm",
+    "calibration_dir": "../../calibration/follower"
+  },
+  "cameras": [
+    {
+      "name": "wrist",
+      "device": 0,
+      "profile": "innomaker-u20cam-720p",
+      "label": "wrist-wide-720p"
+    },
+    {
+      "name": "car",
+      "device": 2,
+      "width": 640,
+      "height": 480,
+      "fps": 15,
+      "fourcc": "MJPG",
+      "jpeg_quality": 80
+    }
+  ]
+}

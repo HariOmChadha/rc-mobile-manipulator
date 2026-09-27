@@ -5,3 +5,10 @@ esp32_controller/.pio/
 esp32_controller/.vscode/
 lerobot/
 data/
+calibration/
+training_dataset/
+.pytest_cache/
+.ruff_cache/
+*.local.json
+.env
+.robot-token

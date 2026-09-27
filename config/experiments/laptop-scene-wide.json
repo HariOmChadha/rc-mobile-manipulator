@@ -1,0 +1,29 @@
+{
+  "control_endpoint": "tcp://127.0.0.1:5555",
+  "video_endpoint": "tcp://127.0.0.1:5556",
+  "fps": 30,
+  "command_timeout_s": 0.5,
+  "request_timeout_s": 0.3,
+  "max_frame_age_s": 0.5,
+  "max_rc_age_s": 0.5,
+  "startup_timeout_s": 10,
+  "leader": {
+    "port": "/dev/ttyACM1",
+    "id": "my_leader_arm",
+    "calibration_dir": "../../calibration/leader"
+  },
+  "esp32_port": "/dev/ttyUSB0",
+  "remote_cameras": [
+    "wrist",
+    "car"
+  ],
+  "cameras": [
+    {
+      "name": "scene",
+      "device": 0,
+      "profile": "innomaker-u20cam-720p",
+      "label": "scene-wide-720p"
+    }
+  ],
+  "output_dir": "data"
+}

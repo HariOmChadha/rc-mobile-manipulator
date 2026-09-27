@@ -1,0 +1,36 @@
+{
+  "generic-vga": {
+    "model": "Unspecified UVC camera",
+    "width": 640,
+    "height": 480,
+    "fps": 15,
+    "fourcc": "MJPG",
+    "jpeg_quality": 80,
+    "strict_mode": false,
+    "notes": "Baseline request; confirm this camera's negotiated modes on hardware."
+  },
+  "innomaker-u20cam-720p": {
+    "model": "INNO-MAKER U20CAM-720P",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "fourcc": "MJPG",
+    "jpeg_quality": 80,
+    "strict_mode": true,
+    "fov_claim": {"horizontal_degrees": 102, "diagonal_degrees": 120, "kind": "manufacturer specification, not measured"},
+    "source": "https://www.inno-maker.com/product/u20cam-720p/",
+    "notes": "Documented MJPEG 1280x720 at 30 fps. FOV in a particular capture mode must be checked physically."
+  },
+  "innomaker-u20cam-720p-vga": {
+    "model": "INNO-MAKER U20CAM-720P",
+    "width": 640,
+    "height": 480,
+    "fps": 30,
+    "fourcc": "MJPG",
+    "jpeg_quality": 80,
+    "strict_mode": true,
+    "fov_claim": {"horizontal_degrees": 102, "diagonal_degrees": 120, "kind": "manufacturer specification, not measured"},
+    "source": "https://www.inno-maker.com/product/u20cam-720p/",
+    "notes": "Documented MJPEG VGA mode. Do not assume 4:3 VGA preserves the full view of the 16:9 720p mode."
+  }
+}
