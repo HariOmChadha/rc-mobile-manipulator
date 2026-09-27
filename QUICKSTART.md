@@ -21,6 +21,29 @@ sequence, and tests the command-loss watchdog. Each run saves logs, images and a
 
 ## When the Pi is available
 
+The connected Pi has now been prepared at `/home/pi/rc-mobile-manipulator`
+(Debian 13, Python 3.13). Dependencies and arm-driver imports pass, using CPU-only
+PyTorch. The private token, follower calibration and local Pi configuration have
+been transferred. All 71 tests passed on both the Pi and laptop.
+
+The live Ethernet dummy run passed: 299 control samples in 10 seconds, 29.85 Hz,
+1.09 ms p95 request latency, and 598 decoded JPEGs across three cameras (wrist
+1280x720, car and scene 640x480). The actual Pi's command-loss watchdog also passed.
+The live Wi-Fi run **did not pass**: it saved 455 samples before a request timeout
+at about 20 seconds. Median latency was 18.7 ms and p95 was 89.1 ms among completed
+requests; these figures exclude the timed-out request. Wi-Fi power saving was
+disabled on both devices and the laptop used 5 GHz, but the Pi could only connect
+on 2.4 GHz. A stable network still needs validation before wireless motion tests.
+Synthetic cameras cannot verify real USB capture, image quality or worst-case
+video bandwidth. Detailed local reports are under `data/pi-validation/`.
+
+For this prepared Pi, skip extraction/installation below. Use `./robot devices`
+on each machine when USB hardware arrives, confirm the local device assignments,
+and follow the hardware checks below. The saved laptop Ethernet fallback is
+`config/laptop-ethernet.local.json`; supply it with `--config` to `check` or `record`.
+
+### Preparing another Pi
+
 `data/deployment/pi-ready.tar.gz` contains the current code, the Pi config, follower
 calibration and matching private control token. Transfer it only to your Pi.
 It does not contain a laptop virtual environment or preinstalled ARM dependencies.
