@@ -6,11 +6,95 @@ Pi, captures the laptop scene camera, and sends car commands to the laptop's ESP
 The leader arm is not opened. Ethernet/Wi-Fi selection uses the existing laptop
 configuration (`./robot ethernet` / `./robot wifi`).
 
-**π0.7 checkpoint loading is not wired yet.** We need the training repository or
-its inference API. A model name alone does not identify the weight format,
-normalization, action order, camera names, or runtime. No real checkpoint or
-physical autonomous movement has been tested. This runner accepts a training-specific
-Python adapter; it does not relabel a π0/π0.5 loader as π0.7.
+The PI Fleet adapter now follows the `pi_sdk.inference.PolicyClient` interface in
+`/home/czarhc/Downloads/message.txt`. Its configured endpoint is
+`wss://api.pi-fleet.com/v1/models/ckpt-1999-rc-arm-pick-ft-sd-v1b`.
+Hosted inference runs remotely; no local checkpoint download or Raspberry Pi
+reimage is needed. The actual PI SDK, API key, server camera metadata and training
+neutral values are still required for a live test. The public `pi-sdk` PyPI
+package is a reserved placeholder and cannot be installed.
+
+## PI Fleet setup
+
+`config/inference.pi-fleet.json` is the tracked template. A local copy has been
+prepared as `config/inference.local.json`, automatically selected by `./robot infer`.
+The local file is ignored by Git. Mock runs continue using the generic config.
+
+1. Obtain the real PI SDK wheel/repository/install instructions from the model
+   provider. Install it into `lerobot/act-athon` using that environment's Python.
+   For a supplied wheel: `lerobot/act-athon/bin/python -m pip install /path/to/sdk.whl`.
+   The required imports are `ClientConfig`, `InferenceInput`, and `PolicyClient`
+   from `pi_sdk.inference`. Do not install the public placeholder again.
+2. Save `PI_API_KEY=your_key` in the repository `.env`, or export `PI_API_KEY` in
+   the shell. The adapter reads only that key and never executes the file.
+   The key is not saved in the inference JSON, action log, or Git.
+3. Run `./robot infer --info`. This connects only to the model and prints its
+   camera names, action topics and horizon. It opens no USB/cameras/Pi connection
+   and does not request an inference. First connection may wait for model startup.
+4. Set `camera_map` keys to those **exact server camera names** and values to the
+   corresponding training camera roles (`scene`, `wrist`, `car`). Unmapped model
+   cameras are errors; the adapter does not insert black frames or guess from
+   camera numbers. Use the same views the model saw in training.
+5. Set `training_rc_neutral` to `{"steer": ..., "throttle": ...}` from
+   `training/splits/pi07_sd_v1.json` or the training episode metadata. Separately
+   set the verified integer stop DAC values `neutral_steer` and `neutral_throttle`.
+   The adapter rejects differences greater than 15 DAC counts by default, matching
+   the supplied script's tolerance. This check does not measure live neutral.
+   Check the mapping, calibration and 30 Hz training rate; set `mapping_confirmed`
+   only once confirmed. Never copy simulation neutral values onto the car.
+
+The supplied script establishes these model topics:
+
+| Topic | Shape | Meaning |
+| --- | --- | --- |
+| `observation/arm/joints/position` | (5,) | First five calibrated SO101 positions |
+| `observation/arm/gripper/position` | (1,) | Calibrated gripper position |
+| `observation/base/drive` | (2,) | (previous DAC − training neutral) / 127.5 |
+| `action/arm/joints/position` | (T,5) | Absolute arm positions |
+| `action/arm/gripper/position` | (T,1) | Absolute gripper positions |
+| `action/base/drive` | (T,2) | Centered steering/throttle offsets |
+
+The adapter converts drive outputs with
+`DAC = training_neutral + model_drive * 127.5`, preserving the training coordinate
+system. This differs from passing model outputs directly to the DAC. The runner
+then checks ranges and rounds to integer DAC values. It does not silently clip
+out-of-range predictions to the car's limits.
+
+With the existing Pi server running, first predict without sending commands:
+
+```bash
+./robot infer --dry-run --duration 10
+```
+
+Dry run reads fresh ESP32 telemetry without requesting a serial reset and reads
+normalized follower feedback plus cameras. It never starts an arm control session,
+arms the ESP32, or sends DAC commands. It can use the existing telemetry-only ESP
+firmware. Do not run it alongside a recording/serial monitor. The normal Pi server
+is required because its `--read-only` variant reports raw encoder counts, which do
+not match the model's calibrated state units.
+
+For autonomous **car** control, flash the updated ESP32 once, with the car powered
+off and serial monitors/recordings closed:
+
+```bash
+./robot flash-esp
+```
+
+This targets the `esp32_port` in laptop configuration rather than auto-selecting
+among the arm/controller USB devices. No firmware is flashed automatically. The
+Pi needs its normal server, not an SD card reflash. The old `C,steer,throttle`
+commands in the supplied example are replaced by this repository's acknowledged,
+session-based ESP protocol with its independent watchdog.
+
+After confirming neutral and the dry run, with the mechanism clear and the wheels
+raised for the first drive check:
+
+```bash
+./robot infer --enable-motion
+```
+
+Ctrl+C ends the session and attempts car neutral/follower hold. Restore joystick
+passthrough with `./robot rc-manual` when ready for manual control.
 
 ## Hardware-free test, one command
 
@@ -25,11 +109,10 @@ It never opens physical USB devices. It does not benchmark π0.7 inference speed
 ## Configure once when the checkpoint arrives
 
 Copy `config/inference.json` to `config/inference.local.json` (ignored by Git).
-Set `adapter`, `checkpoint`, and the verified `neutral_steer` / `neutral_throttle`.
+For a custom runtime, set `adapter`, `checkpoint`, and the verified `neutral_steer` / `neutral_throttle`.
 Confirm `state_names`, `action_names`, `camera_map`, `fps`, and `execution_horizon`
 against the training pipeline, then set `mapping_confirmed` to true. Defaults are
-placeholders, not evidence of the checkpoint's mapping. Select the local file with
-`--inference-config config/inference.local.json`.
+placeholders, not evidence of the checkpoint's mapping. The local file is selected automatically; override with `--inference-config PATH`.
 
 The model adapter factory is imported as `module_name:function_name` and called:
 

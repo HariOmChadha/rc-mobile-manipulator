@@ -28,6 +28,7 @@ def main():
             "classify",
             "infer",
             "rc-manual",
+            "flash-esp",
         ],
     )
     # Let each subcommand own its flags, including --help.
@@ -63,6 +64,7 @@ def main():
         "classify": "mobile_robot.review",
         "infer": "mobile_robot.inference",
         "rc-manual": "mobile_robot.car",
+        "flash-esp": "mobile_robot.car",
     }
     defaults = []
     if args.command in ("check", "record", "benchmark", "infer"):
@@ -72,8 +74,10 @@ def main():
         supplied.add_argument("--config", default=defaults[-1])
         chosen, _ = supplied.parse_known_args(extra)
         cfg = json.loads(Path(chosen.config).read_text())
-        if "PI_ADDRESS" in cfg["control_endpoint"]:
+        if "PI_ADDRESS" in cfg["control_endpoint"] and "--info" not in extra:
             parser.error("Pi address is not set. Run ./robot set-pi PI_IP_OR_HOSTNAME when it is available.")
+    if args.command == "flash-esp":
+        defaults.append("--flash")
     if args.command == "check":
         defaults.append("--check")
     if args.command == "pi":

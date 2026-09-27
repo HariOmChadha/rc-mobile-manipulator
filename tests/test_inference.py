@@ -307,3 +307,35 @@ def test_stale_camera_stops_car(network, spec, monkeypatch):  # noqa: F811
         run(cfg, spec, MockPolicy(spec), mock=True, duration=2, car_factory=CarFactory)
     assert len(cars[0].commands) == 3
     assert cars[0].stopped
+
+
+def test_dry_run_never_starts_or_commands_actuators(network, spec, monkeypatch):  # noqa: F811
+    from mobile_robot.control import Remote
+    import mobile_robot.inference as module
+
+    cfg, _, path = network
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Dry run attempted actuator control")
+
+    monkeypatch.setattr(Remote, "start", forbidden)
+    monkeypatch.setattr(Remote, "action", forbidden)
+    monkeypatch.setattr(module, "Car", forbidden)
+    result = run(
+        cfg,
+        spec,
+        MockPolicy(spec),
+        mock=True,
+        dry_run=True,
+        duration=0.3,
+        car_factory=forbidden,
+        output=path / "dry.jsonl",
+    )
+    assert result["predictions"] >= 1
+    rows = [json.loads(line) for line in (path / "dry.jsonl").read_text().splitlines()]
+    assert all(row["dry_run"] for row in rows)
+    remote = Remote(cfg["control_endpoint"], "integration-test")
+    try:
+        assert remote.call("status")["session"] is None
+    finally:
+        remote.close()

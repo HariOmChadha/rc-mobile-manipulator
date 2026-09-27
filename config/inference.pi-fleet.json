@@ -1,0 +1,39 @@
+{
+  "state_names": [
+    "shoulder_pan.pos",
+    "shoulder_lift.pos",
+    "elbow_flex.pos",
+    "wrist_flex.pos",
+    "wrist_roll.pos",
+    "gripper.pos",
+    "steer",
+    "throttle"
+  ],
+  "action_names": [
+    "shoulder_pan.pos",
+    "shoulder_lift.pos",
+    "elbow_flex.pos",
+    "wrist_flex.pos",
+    "wrist_roll.pos",
+    "gripper.pos",
+    "steer",
+    "throttle"
+  ],
+  "camera_map": {
+    "observation.images.scene": "scene",
+    "observation.images.wrist": "wrist",
+    "observation.images.car": "car"
+  },
+  "units": "normalized_minus100_100_gripper_0_100_and_rc_dac_0_255",
+  "mapping_confirmed": false,
+  "neutral_steer": null,
+  "neutral_throttle": null,
+  "max_inference_s": 5.0,
+  "task": "drive to the raspberry pi box and pick it up and place it in the bowl",
+  "fps": 30,
+  "execution_horizon": 10,
+  "adapter": "mobile_robot.pi_fleet:create",
+  "checkpoint": "wss://api.pi-fleet.com/v1/models/ckpt-1999-rc-arm-pick-ft-sd-v1b",
+  "training_rc_neutral": null,
+  "neutral_tolerance_dac": 15
+}

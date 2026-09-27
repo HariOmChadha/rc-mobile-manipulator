@@ -100,13 +100,38 @@ class Car:
             self.serial.close()
 
 
+def flash_command(cfg):
+    import shutil
+    from pathlib import Path
+
+    port = cfg.get("esp32_port")
+    if not isinstance(port, str) or not port.startswith("/dev/"):
+        raise ValueError("Set the ESP32 /dev/ port in laptop configuration before flashing")
+    executable = shutil.which("platformio") or shutil.which("pio")
+    if executable is None:
+        bundled = Path.home() / ".platformio/penv/bin/platformio"
+        if bundled.is_file():
+            executable = str(bundled)
+    if executable is None:
+        raise RuntimeError("PlatformIO is not installed; install it before flashing the ESP32")
+    project = Path(__file__).resolve().parents[1] / "esp32_controller"
+    return [executable, "run", "-d", str(project), "-t", "upload", "--upload-port", port]
+
+
 def main():
     from .config import load_config
 
     parser = argparse.ArgumentParser(description="Restore ESP32 manual control after autonomous inference")
     parser.add_argument("--config", default="config/laptop.local.json")
+    parser.add_argument("--flash", action="store_true", help="Upload firmware to the configured ESP32 port")
     args = parser.parse_args()
     cfg = load_config(args.config)
+    if args.flash:
+        import subprocess
+
+        print(f"Flashing ESP32 at {cfg['esp32_port']}; keep the car powered off during upload.", flush=True)
+        subprocess.run(flash_command(cfg), check=True)
+        return
     car = Car(cfg["esp32_port"], (0, 50))
     try:
         car.connect()

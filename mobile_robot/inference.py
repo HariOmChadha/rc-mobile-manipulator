@@ -20,6 +20,7 @@ from .car import Car
 from .client import collect_frames
 from .config import load_config
 from .control import Remote
+from .hardware import RCReader
 from .protocol import JOINTS, validate_action
 from .server import get_token
 
@@ -99,16 +100,24 @@ class Predictor:
         self.thread.start()
 
     def work(self, policy):
-        while not self.closed.is_set():
-            try:
-                obs = self.requests.get(timeout=0.1)
-            except queue.Empty:
-                continue
-            try:
-                result = policy.infer(obs)
-            except Exception as error:
-                result = error
-            self.results.put(result)
+        try:
+            while not self.closed.is_set():
+                try:
+                    obs = self.requests.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+                try:
+                    result = policy.infer(obs)
+                except Exception as error:
+                    result = error
+                self.results.put(result)
+        finally:
+            close = getattr(policy, "close", None)
+            if close:
+                try:
+                    close()
+                except Exception as error:
+                    LOG.error("Model connection cleanup failed: %s", type(error).__name__)
 
     def close(self):
         # A stuck GPU/server call must not delay actuator shutdown.
@@ -155,13 +164,16 @@ def run(
     *,
     mock=False,
     enable_motion=False,
+    dry_run=False,
     duration=None,
     stop_event=None,
     car_factory=None,
     output=None,
 ):
     validate_spec(spec, mock)
-    if not mock and not enable_motion:
+    if dry_run and enable_motion:
+        raise ValueError("Choose --dry-run or --enable-motion, not both")
+    if not mock and not enable_motion and not dry_run:
         raise ValueError("Physical inference requires --enable-motion")
     if duration is not None and (not math.isfinite(duration) or duration <= 0):
         raise ValueError("duration must be finite and positive")
@@ -174,7 +186,7 @@ def run(
         raise ValueError("Inference control rate must exceed the ESP32 watchdog rate")
     stop_event = stop_event or threading.Event()
     remote = Remote(cfg["control_endpoint"], get_token(mock), cfg["request_timeout_s"])
-    subscriber = car = predictor = log = None
+    subscriber = car = predictor = log = rc = None
     local = []
     neutral = spec["neutral_steer"], spec["neutral_throttle"]
     dac = neutral
@@ -204,19 +216,27 @@ def run(
                 if stop_event.is_set() or time.monotonic() >= deadline:
                     raise
                 stop_event.wait(0.03)
-        car = (car_factory or (MockCar if mock else Car))(cfg.get("esp32_port"), neutral)
-        car.connect()
+        if dry_run:
+            # Read-only telemetry: no HELLO, ARM, DAC override or serial reset requested.
+            rc = RCReader(cfg.get("esp32_port"), mock=mock, reset_on_open=False)
+            deadline = time.monotonic() + cfg.get("startup_timeout_s", 10)
+            while rc.read()["values"] is None:
+                if stop_event.is_set() or time.monotonic() >= deadline:
+                    raise RuntimeError("No ESP32 telemetry for dry-run observations")
+                stop_event.wait(0.02)
+        else:
+            car = (car_factory or (MockCar if mock else Car))(cfg.get("esp32_port"), neutral)
+            car.connect()
         if stop_event.is_set():
             return {"ticks": 0, "predictions": 0}
-        state = remote.start(mock)
-        car.arm()
+        if not dry_run:
+            state = remote.start(mock)
+            car.arm()
         predictor = Predictor(policy)
         pending = None
         actions = deque()
         started = time.monotonic()
-        LOG.info(
-            "Inference started%s; Ctrl+C stops arm commands and sends car neutral", " (MOCK)" if mock else ""
-        )
+        LOG.info("Inference started (mock=%s, dry_run=%s); Ctrl+C ends the run", mock, dry_run)
         while not stop_event.is_set() and (duration is None or time.monotonic() - started < duration):
             loop_start = time.monotonic()
             state = remote.call("status")
@@ -234,14 +254,21 @@ def run(
                     actions.extend(decode_actions(result, spec))
                     pending = None
                     predictions += 1
+            if dry_run:
+                sample = rc.read()
+                if sample["age_s"] is None or sample["age_s"] > cfg["max_rc_age_s"]:
+                    raise RuntimeError("ESP32 telemetry is stale during dry run")
+                dac = (sample["values"]["steer"], sample["values"]["throttle"])
             if not actions and pending is None:
                 predictor.requests.put_nowait(observation(state, frames, dac, spec))
                 pending = time.monotonic()
             mode = "prediction" if actions else "waiting_neutral"
-            arm, dac = actions.popleft() if actions else (state["follower_joints"], neutral)
+            arm, target_dac = actions.popleft() if actions else (state["follower_joints"], neutral)
             # Check freshness before either actuator is commanded. Network failure stops the loop.
-            remote.action(arm)
-            car.drive(*dac)
+            if not dry_run:
+                remote.action(arm)
+                car.drive(*target_dac)
+                dac = target_dac
             ticks += 1
             if log:
                 log.write(
@@ -250,8 +277,9 @@ def run(
                             "timestamp": time.time(),
                             "mode": mode,
                             "arm": arm,
-                            "steer": dac[0],
-                            "throttle": dac[1],
+                            "steer": target_dac[0],
+                            "throttle": target_dac[1],
+                            "dry_run": dry_run,
                         }
                     )
                     + "\n"
@@ -266,6 +294,7 @@ def run(
             (remote, "stop"),
             (predictor, "close"),
             (car, "close"),
+            (rc, "close"),
             (remote, "close"),
             (subscriber, "close"),
             *((c, "close") for c in local),
@@ -276,18 +305,26 @@ def run(
                     getattr(resource, method)()
                 except Exception as error:
                     LOG.error("Inference cleanup %s failed: %s", method, error)
+        if predictor is None and getattr(policy, "close", None):
+            policy.close()
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="config/laptop.local.json")
-    parser.add_argument("--inference-config", default="config/inference.json")
+    parser.add_argument("--inference-config", help="Defaults to inference.local.json when present")
     parser.add_argument(
         "--adapter", help="Python module:factory; factory(checkpoint=..., config=...) -> policy.infer"
     )
     parser.add_argument("--checkpoint", help="Checkpoint path or identifier passed unchanged to adapter")
     parser.add_argument("--enable-motion", action="store_true")
     parser.add_argument("--mock", action="store_true")
+    parser.add_argument(
+        "--info", action="store_true", help="PI model metadata only; no robot or camera access"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Read observations and predict; send no actuator commands"
+    )
     parser.add_argument("--duration", type=float)
     parser.add_argument("--output", help="New JSONL action log (must not already exist)")
     args = parser.parse_args()
@@ -296,12 +333,30 @@ def main():
     signal.signal(signal.SIGINT, lambda *_: stop_event.set())
     signal.signal(signal.SIGTERM, lambda *_: stop_event.set())
     try:
+        chosen = args.inference_config or (
+            "config/inference.local.json"
+            if not args.mock and Path("config/inference.local.json").exists()
+            else "config/inference.json"
+        )
+        spec = json.loads(Path(chosen).read_text())
+        adapter = args.adapter or spec.get("adapter")
+        checkpoint = args.checkpoint or spec.get("checkpoint")
+        if args.info:
+            if args.mock or args.enable_motion or args.dry_run:
+                parser.error("--info cannot be combined with mock, motion or dry-run")
+            if adapter != "mobile_robot.pi_fleet:create":
+                parser.error("--info currently supports the PI Fleet adapter")
+            from .pi_fleet import inspect
+
+            print(json.dumps(inspect(checkpoint=checkpoint, config=spec), indent=2))
+            return
         cfg = load_config(args.config)
-        spec = json.loads(Path(args.inference_config).read_text())
         if args.mock:
             spec.update(neutral_steer=128, neutral_throttle=100)  # Simulation only, never physical defaults.
         validate_spec(spec, args.mock)
-        if not args.mock and not args.enable_motion:
+        if args.dry_run and args.enable_motion:
+            parser.error("Choose --dry-run or --enable-motion, not both")
+        if not args.mock and not args.enable_motion and not args.dry_run:
             parser.error("Use --enable-motion for physical inference; --mock requires a mock Pi server")
         if args.mock:
             policy = MockPolicy(spec)
@@ -321,6 +376,7 @@ def main():
             policy,
             mock=args.mock,
             enable_motion=args.enable_motion,
+            dry_run=args.dry_run,
             duration=args.duration,
             stop_event=stop_event,
             output=output,
