@@ -231,3 +231,38 @@ After autonomous inference, restore handheld passthrough explicitly:
 ```
 
 This restores live joystick control; center the transmitter controls first.
+
+## Verified hosted-model integration
+
+PI SDK 0.3.2 and its inference/video dependencies are installed on the laptop.
+The supplied registry credential authenticated successfully; both credentials are
+kept in ignored local files. Dependency checks pass. The configured hosted endpoint
+responded to metadata requests, and its saved training profile was read directly.
+It selects scene + wrist images (not car), and absolute joint/gripper/drive topics
+in the adapter's order. This server omits `action_keys` metadata but declares the
+same topics in `output_spec`; the adapter validates that form too.
+
+The local/PI Fleet configs now use the exact server camera topic names and training
+task. `phase_control` is enabled: Enter advances through the four recorded phase
+labels, sending the current label as `raw_text`. The full task remains separate as
+`robot_task_string`. Queued predictions from the previous phase are discarded.
+
+One explicitly approved inference used the first scene/wrist frames and six arm
+readings from `episode_20260927_035136_0ca929e8`, with an explicitly zero model drive
+state as in the supplied example. It returned ten actions in 2.07 seconds. The
+first drive output was approximately `[0.021535, -0.004458]`. Under the supplied
+training script's conversion this is a DAC offset `[+2.746, -0.568]`, to be added
+to the **actual training neutral**. These outputs must not be sent directly as raw
+DAC counts, and their magnitude alone does not prove the training transform.
+
+The exact training neutral and preprocessing source are still required; they were
+not present in the hosted training profile or the inspected episode annotations.
+`mapping_confirmed` and neutral fields remain unset until verified. Physical
+inference has not run. The two-second measured request time also means the basic
+10-action/30-Hz runner pauses at chunk boundaries; this is not continuous 30-Hz
+model inference or a claim of smooth autonomous driving.
+
+Checks cover the actual SDK's H.264/MessagePack path, distinct steering/throttle
+values, 256 valid DAC round trips, and compiled firmware serial parsing through
+DAC pin writes with neutral timeout. These are software tests, not measured output
+voltages or proof of wheel behavior. See `REPLAY.md` for video and command replay.

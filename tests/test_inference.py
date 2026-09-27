@@ -339,3 +339,117 @@ def test_dry_run_never_starts_or_commands_actuators(network, spec, monkeypatch):
         assert remote.call("status")["session"] is None
     finally:
         remote.close()
+
+
+def test_actual_firmware_serial_to_dac_pins(tmp_path):
+    """Exercise the real firmware parser, ACKs, pin writes and timeout together."""
+    compiler = shutil.which("g++")
+    if not compiler:
+        pytest.skip("g++ unavailable")
+    (tmp_path / "Arduino.h").write_text(r"""
+#pragma once
+#include <string>
+#include <sstream>
+#include <cstdint>
+inline uint32_t clockMs=0;
+inline int steerOut=-1, throttleOut=-1;
+struct SerialStub {
+ std::string input;
+ std::ostringstream output;
+ void begin(int) {}
+ int available() {return input.size();}
+ int read() {char c=input[0]; input.erase(0,1); return c;}
+ template<class T> void print(T value) {output << value;}
+ template<class T> void println(T value) {output << value << "\n";}
+};
+inline SerialStub Serial;
+inline unsigned long millis() {return clockMs;}
+inline void delay(int ms) {clockMs += ms;}
+inline void analogReadResolution(int) {}
+inline int analogRead(int pin) {return pin==34 ? 1600 : 3200;}
+inline void dacWrite(int pin,int value) {if(pin==25)steerOut=value; if(pin==26)throttleOut=value;}
+""")
+    source = tmp_path / "firmware.cpp"
+    firmware = Path("esp32_controller/src/main.cpp").resolve()
+    source.write_text(
+        f'#include "{firmware}"\n'
+        + r"""
+#include <cassert>
+int main() {
+ setup(); loop(); assert(steerOut==100 && throttleOut==145);
+ Serial.input="ARM,1234,128,100\n"; loop();
+ assert(steerOut==128 && throttleOut==100);
+ Serial.input="DRIVE,1234,0,17,139\n"; loop();
+ assert(steerOut==17 && throttleOut==139);
+ assert(Serial.output.str().find("ACK,DRIVE,0")!=std::string::npos);
+ Serial.input="DRIVE,1234,1,249,51\n"; loop();
+ assert(steerOut==249 && throttleOut==51);
+ Serial.input="DRIVE,1234,2,0,145\n"; loop();
+ assert(steerOut==0 && throttleOut==145);
+ Serial.input="DRIVE,1234,3,255,50\n"; loop();
+ assert(steerOut==255 && throttleOut==50);
+ Serial.input="DRIVE,1234,4,100,146\n"; loop();
+ assert(steerOut==255 && throttleOut==50); // rejected out-of-range throttle
+ clockMs+=350; loop(); assert(steerOut==128 && throttleOut==100);
+ Serial.input="DRIVE,1234,5,17,139\n"; loop();
+ assert(steerOut==128 && throttleOut==100); // no replay after timeout
+}
+"""
+    )
+    binary = tmp_path / "firmware"
+    subprocess.run(
+        [
+            compiler,
+            "-std=c++17",
+            "-I",
+            str(tmp_path),
+            "-I",
+            "esp32_controller/include",
+            str(source),
+            "-o",
+            str(binary),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run([str(binary)], check=True)
+
+
+def test_inference_phase_switch_discards_old_prediction(network, spec):  # noqa: F811
+    cfg, _, _ = network
+    prompts = []
+    cars = []
+
+    class Keys:
+        count = 0
+
+        def start(self):
+            pass
+
+        def poll(self):
+            self.count += 1
+            return self.count == 3
+
+        def close(self):
+            pass
+
+    class Policy(MockPolicy):
+        def infer(self, obs):
+            prompts.append(obs["prompt"])
+            time.sleep(0.12)
+            result = super().infer(obs)
+            if obs["prompt"] == "drive to object":
+                result[0][-2:] = [17, 139]
+            else:
+                result[0][-2:] = [249, 51]
+            return result
+
+    class CarFactory(MockCar):
+        def __init__(self, *args):
+            super().__init__(*args)
+            cars.append(self)
+
+    run(cfg, spec, Policy(spec), mock=True, duration=0.6, phase_keys=Keys(), car_factory=CarFactory)
+    assert prompts[:2] == ["drive to object", "pick up object"]
+    assert (17, 139) not in cars[0].commands
+    assert (249, 51) in cars[0].commands

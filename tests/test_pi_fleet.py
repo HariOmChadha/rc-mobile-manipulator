@@ -164,3 +164,127 @@ def test_flash_targets_configured_esp(monkeypatch):
     command = flash_command({"esp32_port": "/dev/serial/by-id/esp32"})
     assert command[-2:] == ["--upload-port", "/dev/serial/by-id/esp32"]
     assert command[command.index("-t") + 1] == "upload"
+
+
+def test_all_valid_dac_values_round_trip_without_channel_swap(spec, sdk):
+    """Every valid integer DAC pair survives the training transform and host rounding."""
+    policy = Policy(checkpoint=spec["checkpoint"], config=spec, types=sdk)
+    client = sdk[2].instances[-1]
+    # Deliberately unrelated normalized network tensor; the adapter must never command it.
+    original = client.infer
+
+    def infer_with_raw(data):
+        result = original(data)
+        result.raw_actions = np.full((1, 8), -999, np.float32)
+        return result
+
+    client.infer = infer_with_raw
+    # Distinct sweeps detect accidentally swapping steer/throttle or applying scale twice.
+    for steer in range(256):
+        throttle = 50 + steer % 96
+        data = obs(spec)
+        data["state"][-2:] = [steer, throttle]
+        normalized = (np.array([steer, throttle]) - policy.training_neutral) / 127.5
+        client.actions[ACTION_TOPICS[2]] = np.tile(normalized, (3, 1))
+        target = policy.infer(data)
+        np.testing.assert_allclose(client.observed.states[DRIVE_STATE], normalized, atol=1e-7)
+        assert decode_actions(target, spec)[0][1] == (steer, throttle)
+    policy.close()
+
+
+def test_real_pi_sdk_wire_preserves_drive_units(spec, monkeypatch):
+    """Use the installed SDK's image encoding, MessagePack, and action postprocessing."""
+    sdk = pytest.importorskip("pi_sdk.inference")
+    from pi_sdk.inference import msgpack_numpy
+
+    monkeypatch.setenv("PI_API_KEY", "unit-test-only")
+    expected = np.asarray([17, 139], np.float32)
+    neutral = np.asarray([120.5, 99.5], np.float32)
+    normalized = (expected - neutral) / 127.5
+
+    class Wire:
+        def send(self, packet):
+            self.request = msgpack_numpy.unpackb(packet, raw=False)
+
+        def recv(self):
+            return msgpack_numpy.packb(
+                (
+                    {"success": True},
+                    {
+                        "result": {
+                            "outputs": {
+                                ACTION_TOPICS[0]: np.zeros((3, 5), np.float32),
+                                ACTION_TOPICS[1]: np.full((3, 1), 20, np.float32),
+                                ACTION_TOPICS[2]: np.tile(normalized, (3, 1)),
+                            },
+                            "raw_outputs": {"actions": np.full((3, 32), -999, np.float32)},
+                        }
+                    },
+                )
+            )
+
+        def close(self):
+            pass
+
+    wire = Wire()
+
+    class RealClient(sdk.PolicyClient):
+        def __init__(self, settings):
+            settings.telemetry_mode = "none"
+            super().__init__(settings)
+            self._ws = wire
+            self._server_metadata = sdk.InferenceServerMetadata(
+                camera_names=list(spec["camera_map"]),
+                action_keys=list(ACTION_TOPICS),
+                action_horizon=3,
+                action_dim=8,
+                input_spec={
+                    key: {}
+                    for key in [
+                        *spec["camera_map"],
+                        ARM_STATE,
+                        GRIPPER_STATE,
+                        DRIVE_STATE,
+                        "raw_text",
+                        "robot_task_string",
+                    ]
+                },
+                image_preprocessing=sdk.ImagePreprocessingConfig(
+                    target_resolution=(16, 24), resize_mode="resize", interpolation="bilinear"
+                ),
+            )
+
+    policy = Policy(
+        checkpoint=spec["checkpoint"], config=spec, types=(sdk.ClientConfig, sdk.InferenceInput, RealClient)
+    )
+    try:
+        data = obs(spec)
+        data["state"][-2:] = expected
+        result = policy.infer(data)
+        api, payload = wire.request
+        assert api == "infer"
+        np.testing.assert_allclose(payload["inference_input"]["state"][DRIVE_STATE], normalized, atol=1e-7)
+        assert payload["image_compression"] == "h264"
+        assert all(
+            isinstance(image, bytes) and len(image) > 0
+            for image in payload["inference_input"]["image"].values()
+        )
+        assert decode_actions(result, spec)[0][1] == (17, 139)
+    finally:
+        policy.close()
+
+
+def test_live_server_style_output_spec_without_action_keys(spec, sdk):
+    Base = sdk[2]
+
+    class NoKeysClient(Base):
+        def __init__(self, settings):
+            super().__init__(settings)
+            self.server_metadata.action_keys = None
+            self.server_metadata.output_spec = {
+                topic: [[50, width], "float64"] for topic, width in zip(ACTION_TOPICS, (5, 1, 2), strict=True)
+            }
+
+    policy = Policy(checkpoint=spec["checkpoint"], config=spec, types=(sdk[0], sdk[1], NoKeysClient))
+    assert decode_actions(policy.infer(obs(spec)), spec)[0][1] == (130, 94)
+    policy.close()

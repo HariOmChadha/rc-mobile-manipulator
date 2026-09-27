@@ -21,6 +21,7 @@ from .client import collect_frames
 from .config import load_config
 from .control import Remote
 from .hardware import RCReader
+from .phases import EnterKey, Phases
 from .protocol import JOINTS, validate_action
 from .server import get_token
 
@@ -79,7 +80,7 @@ def observation(state, frames, dac, spec):
     named = {**state["follower_joints"], "steer": dac[0], "throttle": dac[1]}
     result = {
         "state": np.asarray([named[name] for name in spec["state_names"]], dtype=np.float32),
-        "prompt": spec["task"],
+        "prompt": spec.get("subtask", spec["task"]),
     }
     for key, name in spec["camera_map"].items():
         frame = cv2.imdecode(np.frombuffer(frames[name][1], dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -169,6 +170,7 @@ def run(
     stop_event=None,
     car_factory=None,
     output=None,
+    phase_keys=None,
 ):
     validate_spec(spec, mock)
     if dry_run and enable_motion:
@@ -191,6 +193,7 @@ def run(
     neutral = spec["neutral_steer"], spec["neutral_throttle"]
     dac = neutral
     ticks = predictions = 0
+    phases = Phases()
     try:
         if output:
             path = Path(output)
@@ -234,11 +237,18 @@ def run(
             car.arm()
         predictor = Predictor(policy)
         pending = None
+        pending_phase = None
         actions = deque()
+        if phase_keys is not None:
+            phase_keys.start()
+            LOG.info("Phase: %s. Enter advances to the next trained subtask.", phases.name)
         started = time.monotonic()
         LOG.info("Inference started (mock=%s, dry_run=%s); Ctrl+C ends the run", mock, dry_run)
         while not stop_event.is_set() and (duration is None or time.monotonic() - started < duration):
             loop_start = time.monotonic()
+            if phase_keys is not None and phase_keys.poll() and phases.advance():
+                actions.clear()
+                LOG.info("Phase: %s; old-phase predictions will be discarded", phases.name)
             state = remote.call("status")
             frames = collect_frames(cfg, subscriber, local, state, time.monotonic(), mock)
             if pending is not None:
@@ -251,7 +261,8 @@ def run(
                 else:
                     if isinstance(result, Exception):
                         raise result
-                    actions.extend(decode_actions(result, spec))
+                    if phase_keys is None or pending_phase == phases.index:
+                        actions.extend(decode_actions(result, spec))
                     pending = None
                     predictions += 1
             if dry_run:
@@ -260,8 +271,10 @@ def run(
                     raise RuntimeError("ESP32 telemetry is stale during dry run")
                 dac = (sample["values"]["steer"], sample["values"]["throttle"])
             if not actions and pending is None:
-                predictor.requests.put_nowait(observation(state, frames, dac, spec))
+                request_spec = {**spec, "subtask": phases.name} if phase_keys is not None else spec
+                predictor.requests.put_nowait(observation(state, frames, dac, request_spec))
                 pending = time.monotonic()
+                pending_phase = phases.index
             mode = "prediction" if actions else "waiting_neutral"
             arm, target_dac = actions.popleft() if actions else (state["follower_joints"], neutral)
             # Check freshness before either actuator is commanded. Network failure stops the loop.
@@ -280,6 +293,9 @@ def run(
                             "steer": target_dac[0],
                             "throttle": target_dac[1],
                             "dry_run": dry_run,
+                            "subtask": phases.name
+                            if phase_keys is not None
+                            else spec.get("subtask", spec["task"]),
                         }
                     )
                     + "\n"
@@ -295,6 +311,7 @@ def run(
             (predictor, "close"),
             (car, "close"),
             (rc, "close"),
+            (phase_keys, "close"),
             (remote, "close"),
             (subscriber, "close"),
             *((c, "close") for c in local),
@@ -380,6 +397,7 @@ def main():
             duration=args.duration,
             stop_event=stop_event,
             output=output,
+            phase_keys=EnterKey() if spec.get("phase_control") else None,
         )
         print(json.dumps({**result, "action_log": output}))
     except Exception as error:

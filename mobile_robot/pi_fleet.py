@@ -65,7 +65,7 @@ def connect(checkpoint, config, *, types=None):
         gateway_url=checkpoint,
         api_key=key,
         robot_task_string=config["task"],
-        raw_text=config["task"],
+        raw_text=config.get("subtask", config["task"]),
         action_keys=list(ACTION_TOPICS),
         execute_chunk_size=config["execution_horizon"],
     )
@@ -77,8 +77,11 @@ def metadata(client):
     meta = client.server_metadata
     return {
         "camera_names": list(meta.camera_names),
-        "action_keys": list(meta.action_keys),
-        "action_horizon": int(meta.action_horizon),
+        "action_keys": list(meta.action_keys or []),
+        "action_horizon": int(meta.action_horizon) if meta.action_horizon is not None else None,
+        "action_dim": getattr(meta, "action_dim", None),
+        "input_spec": getattr(meta, "input_spec", None),
+        "output_spec": getattr(meta, "output_spec", None),
     }
 
 
@@ -121,7 +124,9 @@ class Policy:
                     "Set camera_map keys to the exact server camera_names; no black-frame substitutions. "
                     f"Server expects: {self.metadata['camera_names']}"
                 )
-            if not set(ACTION_TOPICS) <= set(self.metadata["action_keys"]):
+            # SDK 0.3.2 servers may omit action_keys while declaring each output topic.
+            advertised = set(self.metadata["action_keys"]) | set(self.metadata["output_spec"] or {})
+            if not set(ACTION_TOPICS) <= advertised:
                 raise ValueError(f"Hosted model does not expose all required action topics: {ACTION_TOPICS}")
         except BaseException:
             self.client.close()
