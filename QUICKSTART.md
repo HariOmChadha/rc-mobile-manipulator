@@ -181,6 +181,11 @@ For each subsequent recording, keep the Pi server running and use this on the la
 cd /home/czarhc/act-athon && ./robot record --enable-motion
 ```
 
+Recording starts in **drive to object**. Press **Enter** to advance to **pick up
+object**, then **drive to the bin**, then **drop in bin**. The terminal shows the
+active phase, and every telemetry row records it. Enter in the final phase keeps
+recording there. Keep this terminal focused for phase keys.
+
 Press Ctrl+C to finish and save, then enter `g` for good or `b` for bad. Episodes go
 to `training_dataset/good/episode_...` or `training_dataset/bad/episode_...` on the
 laptop. Enter alone leaves the run in `training_dataset/unreviewed/episode_...`.

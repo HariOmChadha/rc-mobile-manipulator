@@ -193,6 +193,31 @@ terminal leaves it unreviewed. Run the same command again for the next episode;
 each directory is unique. `--duration 20` records one timed episode and then asks
 the same question.
 
+Each recording starts in **drive to object**. In the recording terminal, press
+**Enter** when moving to the next phase:
+
+1. drive to object (initial phase)
+2. pick up object
+3. drive to the bin
+4. drop in bin
+
+The terminal prints the active phase. Enter in phase 4 keeps that phase active;
+use Ctrl+C to finish and then classify the run. Phase changes only label data;
+they do not pause recording or issue robot actions. Each `telemetry.jsonl` row
+contains `phase`, a one-based `phase_index`, and `episode_elapsed_s`. This labels
+the arm/controller sample and its three camera references together. Images are
+still stored once and can be referenced by rows on either side of a boundary.
+`metadata.json` lists `phase_names` and, after saving, `phase_transitions` with
+zero-based `start_row`, wall-clock `timestamp`, and monotonic `elapsed_s` for each
+phase's first saved row. A stopped run may have fewer than four phases.
+
+Keyboard input is polled without blocking the control loop. Keys queued during
+startup/shutdown are discarded so they cannot accidentally advance a phase or
+answer the good/bad question. Type Enter alone; text followed by Enter is ignored
+during recording. Without an interactive terminal, recording continues in phase
+1 and reports that keyboard phase changes are unavailable. Each new episode
+starts again at phase 1; old episodes are not relabeled.
+
 Real recordings now default to `training_dataset/` on the laptop:
 
 ```text

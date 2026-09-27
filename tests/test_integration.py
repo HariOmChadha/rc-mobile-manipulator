@@ -18,6 +18,7 @@ import zmq
 from mobile_robot.client import run
 from mobile_robot.config import load_config
 from mobile_robot.control import Remote
+from mobile_robot.phases import PHASES
 from mobile_robot.protocol import JOINTS
 
 
@@ -143,6 +144,24 @@ def test_ctrl_c_flushes_and_stops_before_review(network, answer, quality):
                 time.sleep(0.03)
             else:
                 pytest.fail(log_path.read_text())
+
+            def saved_rows():
+                # Only parse newline-terminated rows while the writer is active.
+                text = files[0].read_text().rsplit("\n", 1)[0]
+                return [json.loads(line) for line in text.splitlines()]
+
+            assert {row["phase"] for row in saved_rows()} == {PHASES[0]}
+            for phase_index in (2, 3, 4, 4):
+                before = len(saved_rows())
+                os.write(master, b"\n")
+                deadline = time.monotonic() + 5
+                while True:
+                    current = saved_rows()
+                    if len(current) >= before + 3 and current[-1]["phase_index"] == phase_index:
+                        break
+                    assert proc.poll() is None, log_path.read_text()
+                    assert time.monotonic() < deadline, log_path.read_text()
+                    time.sleep(0.02)
             proc.send_signal(signal.SIGINT)
             deadline = time.monotonic() + 12
             while "Was this run good or bad?" not in log_path.read_text():
@@ -161,6 +180,15 @@ def test_ctrl_c_flushes_and_stops_before_review(network, answer, quality):
             rows = [json.loads(line) for line in files[0].read_text().splitlines()]
             assert metadata["recording_status"] == "complete"
             assert metadata["rows"] == len(rows) >= 5
+            assert metadata["phase_names"] == list(PHASES)
+            transitions = metadata["phase_transitions"]
+            assert [event["phase"] for event in transitions] == list(PHASES)
+            for index, event in enumerate(transitions):
+                end = transitions[index + 1]["start_row"] if index < 3 else len(rows)
+                segment = rows[event["start_row"] : end]
+                assert segment and all(row["phase"] == event["phase"] for row in segment)
+                assert event["timestamp"] == segment[0]["timestamp"]
+                assert event["elapsed_s"] == segment[0]["episode_elapsed_s"]
             os.write(master, answer)
             assert proc.wait(timeout=10) == 0, log_path.read_text()
             episodes = list(root.glob(f"{quality}/episode_*"))

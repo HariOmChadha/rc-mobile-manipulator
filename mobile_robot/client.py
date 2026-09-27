@@ -8,6 +8,7 @@ from .cameras import Capture, Subscriber, frame_age
 from .config import load_config
 from .control import Remote
 from .hardware import Arm, MockLeader, RCReader
+from .phases import PHASES, EnterKey, Phases
 from .recording import Recorder, update_metadata
 from .server import get_token
 
@@ -44,7 +45,7 @@ def collect_frames(cfg, subscriber, local, state, received_mono, mock):
     return selected
 
 
-def run(cfg, *, mock=False, duration=None, output=None, stop_event=None, check=False):
+def run(cfg, *, mock=False, duration=None, output=None, stop_event=None, check=False, phase_keys=None):
     stop_event = stop_event or threading.Event()
     local_names = {c["name"] for c in cfg["cameras"]}
     if local_names & set(cfg.get("remote_cameras", [])):
@@ -56,6 +57,7 @@ def run(cfg, *, mock=False, duration=None, output=None, stop_event=None, check=F
     result = None
     failure = None
     cleanup_errors = []
+    phases = Phases()
     try:
         state = remote.call("status")
         if state["mock"] is not mock:
@@ -112,6 +114,8 @@ def run(cfg, *, mock=False, duration=None, output=None, stop_event=None, check=F
                 "mock": mock,
                 "recording_status": "recording",
                 "quality": "unreviewed",
+                "phase_names": list(PHASES),
+                "phase_index_base": 1,
                 "joint_units": "normalized_minus100_100_gripper_0_100",
                 "rc_units": "raw_dac_0_255",
                 "config": cfg,
@@ -121,8 +125,20 @@ def run(cfg, *, mock=False, duration=None, output=None, stop_event=None, check=F
         state = remote.start(mock)
         started = time.monotonic()
         LOG.info("Recording to %s", recorder.path)
+        if phase_keys is not None:
+            phase_keys.start()
+        LOG.info("Phase 1/4: %s", phases.name)
+        if phase_keys is not None and phase_keys.fd is not None:
+            LOG.info("Press Enter for the next phase; Ctrl+C finishes recording.")
+        else:
+            LOG.info("Phase keyboard unavailable; samples remain in phase 1.")
         while not stop_event.is_set() and (duration is None or time.monotonic() - started < duration):
             loop_start = time.monotonic()
+            if phase_keys is not None and phase_keys.poll():
+                if phases.advance():
+                    LOG.info("Phase %s/4: %s", phases.index + 1, phases.name)
+                else:
+                    LOG.info("Already in final phase: %s. Ctrl+C finishes recording.", phases.name)
             action = leader.observe()
             rc_state = rc.read()
             if cfg.get("esp32_port") and (
@@ -132,9 +148,11 @@ def run(cfg, *, mock=False, duration=None, output=None, stop_event=None, check=F
             state = remote.action(action)
             received_mono = time.monotonic()
             frames = collect_frames(cfg, subscriber, local, state, received_mono, mock)
+            timestamp = time.time()
             recorder.submit(
                 {
-                    "timestamp": time.time(),
+                    "timestamp": timestamp,
+                    **phases.fields(state["seq"], timestamp, received_mono - started),
                     "command_seq": state["seq"],
                     "leader_action": action,
                     "applied_action": state["applied_action"],
@@ -157,7 +175,7 @@ def run(cfg, *, mock=False, duration=None, output=None, stop_event=None, check=F
         except Exception as error:
             LOG.warning("Stop request failed; Pi watchdog remains responsible: %s", error)
             cleanup_errors.append(str(error))
-        for resource in [remote, subscriber, *local, rc, leader, recorder]:
+        for resource in [remote, subscriber, *local, rc, leader, recorder, phase_keys]:
             if resource is not None:
                 try:
                     resource.close()
@@ -170,6 +188,7 @@ def run(cfg, *, mock=False, duration=None, output=None, stop_event=None, check=F
                 recording_status=status,
                 recording_error=failure or "; ".join(cleanup_errors) or None,
                 rows=recorder.saved,
+                phase_transitions=phases.saved_transitions(recorder.saved),
             )
             result = {"path": str(recorder.path), "rows": recorder.saved, "recording_status": status}
             LOG.info("Saved %s rows to %s (%s)", recorder.saved, recorder.path, status)
@@ -232,6 +251,7 @@ def main():
             output=root / "unreviewed" if review else root,
             stop_event=stop,
             check=args.check,
+            phase_keys=EnterKey() if not args.check else None,
         )
         if review and result:
             # A second Ctrl+C dismisses review; no hardware remains open here.
