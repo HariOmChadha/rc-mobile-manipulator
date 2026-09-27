@@ -77,6 +77,9 @@ def run(cfg, *, mock=False, duration=None, output=None, stop_event=None, check=F
         if check:
             return {
                 "mock": mock,
+                "read_only": state.get("read_only", False),
+                "joint_units": state["units"],
+                "calibration_matches": state.get("calibration_matches"),
                 "follower_joints": state["follower_joints"],
                 "cameras": {
                     name: {

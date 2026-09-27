@@ -89,6 +89,10 @@ mismatch must be resolved before normal movement mode. This verifies observation
 motion tracking or a car emergency stop. Opening the controller serial port
 requests DTR/RTS low to avoid resetting it; no control data is written to it.
 
+If the laptop leader/controller are unavailable, add `--skip-local-controls` for
+an explicitly partial follower-and-cameras benchmark. Its report marks those
+local devices as untested; it is not a full hardware readiness check.
+
 Stop the read-only Pi server before the later movement test and start `./robot pi`
 normally. Then run `./robot check` before `./robot record --enable-motion`.
 

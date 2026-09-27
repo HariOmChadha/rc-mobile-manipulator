@@ -135,6 +135,21 @@ def test_benchmark_refuses_motion_enabled_server(network):
     assert "read-only" in report["error"]
 
 
+@pytest.mark.parametrize("network", ["read-only"], indirect=True)
+def test_partial_benchmark_explicitly_marks_omitted_controls(network):
+    from mobile_robot.benchmark import run as benchmark
+
+    cfg, _, path = network
+    report = benchmark(cfg, duration=0.3, output=path / "partial", mock=True, skip_local_controls=True)
+    assert report["passed"]
+    assert report["local_controls_tested"] is False
+    assert report["rc_last_values"] is None
+    rows = [
+        json.loads(line) for line in (Path(report["episode"]) / "telemetry.jsonl").read_text().splitlines()
+    ]
+    assert all(row["leader_joints"] is None for row in rows)
+
+
 def test_bad_json_wrong_token_and_recovery(network):
     cfg, _, _ = network
     context = zmq.Context()

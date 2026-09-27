@@ -28,7 +28,7 @@ def percentiles(values):
     }
 
 
-def run(cfg, *, duration=30, output="data/benchmarks", mock=False):
+def run(cfg, *, duration=30, output="data/benchmarks", mock=False, skip_local_controls=False):
     folder = Path(output) / f"run_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
     folder.mkdir(parents=True)
     remote = Remote(cfg["control_endpoint"], get_token(mock), cfg["request_timeout_s"])
@@ -43,12 +43,14 @@ def run(cfg, *, duration=30, output="data/benchmarks", mock=False):
         state = remote.call("status")
         if not state.get("read_only") or state["mock"] is not mock:
             raise RuntimeError("Start the Pi with ./robot pi --read-only (add --mock only for simulation)")
-        leader = MockLeader() if mock else Arm(cfg["leader"], leader=True, read_only=True)
+        if not skip_local_controls:
+            leader = MockLeader() if mock else Arm(cfg["leader"], leader=True, read_only=True)
         calibration = {
             "leader": getattr(leader, "calibration_matches", None),
             "follower": state.get("calibration_matches"),
         }
-        rc = RCReader(cfg.get("esp32_port"), mock=mock, reset_on_open=False)
+        if not skip_local_controls:
+            rc = RCReader(cfg.get("esp32_port"), mock=mock, reset_on_open=False)
         for camera in cfg["cameras"]:
             local.append(Capture(camera, mock=mock).start())
         deadline = time.monotonic() + cfg.get("startup_timeout_s", 10)
@@ -56,9 +58,11 @@ def run(cfg, *, duration=30, output="data/benchmarks", mock=False):
             state = remote.call("status")
             try:
                 collect_frames(cfg, subscriber, local, state, time.monotonic(), mock)
-                rc_state = rc.read()
-                if cfg.get("esp32_port") and (
-                    rc_state["age_s"] is None or rc_state["age_s"] > cfg["max_rc_age_s"]
+                rc_state = rc.read() if rc else {"values": None, "age_s": None}
+                if (
+                    rc
+                    and cfg.get("esp32_port")
+                    and (rc_state["age_s"] is None or rc_state["age_s"] > cfg["max_rc_age_s"])
                 ):
                     raise RuntimeError("Waiting for fresh ESP32 telemetry")
                 break
@@ -80,11 +84,13 @@ def run(cfg, *, duration=30, output="data/benchmarks", mock=False):
         started = time.monotonic()
         while time.monotonic() - started < duration:
             loop_start = time.monotonic()
-            leader_joints = leader.observe()
+            leader_joints = leader.observe() if leader else None
             leader_read_s = time.monotonic() - loop_start
-            rc_state = rc.read()
-            if cfg.get("esp32_port") and (
-                rc_state["age_s"] is None or rc_state["age_s"] > cfg["max_rc_age_s"]
+            rc_state = rc.read() if rc else {"values": None, "age_s": None}
+            if (
+                rc
+                and cfg.get("esp32_port")
+                and (rc_state["age_s"] is None or rc_state["age_s"] > cfg["max_rc_age_s"])
             ):
                 raise RuntimeError("ESP32 telemetry became stale")
             state = remote.call("status")
@@ -158,13 +164,16 @@ def run(cfg, *, duration=30, output="data/benchmarks", mock=False):
         "mock": mock,
         "joint_units": "raw_encoder_counts",
         "calibration_matches": calibration,
+        "local_controls_tested": not skip_local_controls,
         "control_endpoint": cfg["control_endpoint"],
         "requested_duration_s": duration,
         "elapsed_s": elapsed,
         "samples": len(rows),
         "telemetry_hz": len(rows) / elapsed if elapsed else 0,
         "round_trip_ms": percentiles([r["round_trip_s"] * 1000 for r in rows]),
-        "leader_read_ms": percentiles([r["leader_read_s"] * 1000 for r in rows]),
+        "leader_read_ms": {}
+        if skip_local_controls
+        else percentiles([r["leader_read_s"] * 1000 for r in rows]),
         "rc_last_values": rows[-1]["rc_state"]["values"] if rows else None,
         "cameras": cameras,
         "episode": str(recorder.path) if recorder else None,
@@ -181,10 +190,21 @@ def main():
     parser.add_argument("--duration", type=float, default=30)
     parser.add_argument("--output", default="data/benchmarks")
     parser.add_argument("--mock", action="store_true")
+    parser.add_argument(
+        "--skip-local-controls",
+        action="store_true",
+        help="Partial test: follower and cameras only; omit leader and controller",
+    )
     args = parser.parse_args()
     if not math.isfinite(args.duration) or not 1 <= args.duration <= 3600:
         parser.error("Duration must be between 1 and 3600 seconds")
-    report = run(load_config(args.config), duration=args.duration, output=args.output, mock=args.mock)
+    report = run(
+        load_config(args.config),
+        duration=args.duration,
+        output=args.output,
+        mock=args.mock,
+        skip_local_controls=args.skip_local_controls,
+    )
     print(json.dumps(report, indent=2))
     if not report["passed"]:
         raise SystemExit(1)
