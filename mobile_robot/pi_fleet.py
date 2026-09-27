@@ -16,24 +16,31 @@ ACTION_TOPICS = ("action/arm/joints/position", "action/arm/gripper/position", "a
 RC_HALF = 127.5
 
 
-def load_api_key(path=None):
-    """Read only PI_API_KEY; do not execute .env or overwrite a shell credential."""
-    if os.environ.get("PI_API_KEY"):
-        return os.environ["PI_API_KEY"]
+def local_setting(name, path=None):
+    """Read one named .env setting without executing it; shell settings take priority."""
+    if os.environ.get(name):
+        return os.environ[name]
     path = Path(path) if path else Path(__file__).resolve().parents[1] / ".env"
     if path.is_file():
         for raw in path.read_text().splitlines():
             line = raw.strip()
             if line.startswith("export "):
                 line = line[7:].strip()
-            name, sep, value = line.partition("=")
-            if sep and name.strip() == "PI_API_KEY":
+            key, sep, value = line.partition("=")
+            if sep and key.strip() == name:
                 value = value.strip()
                 if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
                     value = value[1:-1]
                 if value:
                     return value
-    raise ValueError("Set PI_API_KEY in the shell or repository .env; never commit the key")
+    return None
+
+
+def load_api_key(path=None):
+    value = local_setting("PI_API_KEY", path)
+    if not value:
+        raise ValueError("Set PI_API_KEY in the shell or repository .env; never commit the key")
+    return value
 
 
 def sdk_types():
@@ -41,7 +48,7 @@ def sdk_types():
         from pi_sdk.inference import ClientConfig, InferenceInput, PolicyClient
     except ImportError as error:
         raise RuntimeError(
-            "Install the actual PI SDK supplied with your hosted model into lerobot/act-athon. "
+            "Run ./robot setup-inference with your PI registry service-account JSON configured. "
             "The public pi-sdk PyPI package is a reserved placeholder, not this SDK. "
             "Required imports: pi_sdk.inference.ClientConfig, InferenceInput, PolicyClient"
         ) from error

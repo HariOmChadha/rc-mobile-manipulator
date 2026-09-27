@@ -29,6 +29,7 @@ def main():
             "infer",
             "rc-manual",
             "flash-esp",
+            "setup-inference",
         ],
     )
     # Let each subcommand own its flags, including --help.
@@ -65,6 +66,7 @@ def main():
         "infer": "mobile_robot.inference",
         "rc-manual": "mobile_robot.car",
         "flash-esp": "mobile_robot.car",
+        "setup-inference": "mobile_robot.setup_inference",
     }
     defaults = []
     if args.command in ("check", "record", "benchmark", "infer"):

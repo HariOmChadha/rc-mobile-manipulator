@@ -20,14 +20,44 @@ package is a reserved placeholder and cannot be installed.
 prepared as `config/inference.local.json`, automatically selected by `./robot infer`.
 The local file is ignored by Git. Mock runs continue using the generic config.
 
-1. Obtain the real PI SDK wheel/repository/install instructions from the model
-   provider. Install it into `lerobot/act-athon` using that environment's Python.
-   For a supplied wheel: `lerobot/act-athon/bin/python -m pip install /path/to/sdk.whl`.
-   The required imports are `ClientConfig`, `InferenceInput`, and `PolicyClient`
-   from `pi_sdk.inference`. Do not install the public placeholder again.
-2. Save `PI_API_KEY=your_key` in the repository `.env`, or export `PI_API_KEY` in
-   the shell. The adapter reads only that key and never executes the file.
-   The key is not saved in the inference JSON, action log, or Git.
+1. Obtain the **registry service-account JSON file** supplied by PI during partner
+   onboarding. This is separate from the organization API key. Set its absolute
+   path as `GOOGLE_APPLICATION_CREDENTIALS=/path/to/pi-sa-key.json` in the ignored
+   repository `.env` or shell. The file must contain the actual PI-provided
+   service-account credentials; do not create a replacement Google account/key
+   and expect access to PI's registry.
+2. Create/rotate the **organization API key** in the Partner Portal at
+   <https://partner.pi-fleet.com>. It must belong to the organization hosting this
+   model. Save `PI_API_KEY=your_key` in `.env` or export it in the shell. A private
+   `.env` template has been prepared locally, and `.env.example` documents both
+   settings. Keep both credentials out of source control.
+
+   Install the SDK with the prepared command:
+
+   ```bash
+   ./robot setup-inference
+   ```
+
+   Or provide the registry key path for this invocation:
+
+   ```bash
+   ./robot setup-inference --registry-key /absolute/path/to/pi-sa-key.json
+   ```
+
+   The command installs the registry authentication helpers, then
+   `pi-sdk[video,inference]>=0.3.2` from
+   `https://us-east5-python.pkg.dev/pi-external-partners/pi-sdk/simple/`, with PyPI
+   as the secondary index, as specified in the provided partner guide. It uses the
+   same Python environment as `./robot`, enables the Google Artifact Registry
+   keyring backend without interactive password prompts, and preserves the
+   network/camera dependency constraints. It does not configure pip globally or
+   send robot commands. It checks for a valid credential file before installation.
+
+   `./robot setup-inference --check` reports local readiness without network access,
+   installation, or printing credential values. The auth helpers are installed
+   locally; private SDK installation still requires the onboarding key. The public
+   `pi-sdk` placeholder cannot substitute for the private package.
+
 3. Run `./robot infer --info`. This connects only to the model and prints its
    camera names, action topics and horizon. It opens no USB/cameras/Pi connection
    and does not request an inference. First connection may wait for model startup.
