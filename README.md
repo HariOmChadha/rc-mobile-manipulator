@@ -9,16 +9,20 @@ signals and camera views together for training and inspection.
 
 ## Demo
 
-<video src="https://github.com/HariOmChadha/RackHand/raw/refs/heads/main/docs/assets/demo.mp4" controls playsinline preload="metadata" poster="docs/assets/demo-poster.jpg" width="960">
-  <a href="docs/assets/demo.mp4">Watch the RackHand demo</a>
-</video>
+https://github.com/user-attachments/assets/aa04ec85-ddfd-4353-aea6-eb077d7ac5fc
+
+<details>
+<summary>Animated preview and download fallback</summary>
 
 [![RackHand demo: synchronized scene, wrist and car views](docs/assets/demo-preview.gif)](https://github.com/HariOmChadha/RackHand/raw/refs/heads/main/docs/assets/demo.mp4)
+
+First 12 seconds at reduced playback frame rate; click for the full MP4.
+
+</details>
 
 **[Watch the full 40-second video](https://github.com/HariOmChadha/RackHand/raw/refs/heads/main/docs/assets/demo.mp4)**
 · [Project page source](docs/index.html)
 
-The animation is a short preview for Markdown viewers without inline video support.
 The full video shows a recorded demonstration with three views on one timeline,
 plus steering/throttle telemetry. It is not evidence of an autonomous policy run.
 Open `docs/index.html` locally for the project page and embedded MP4 player.
