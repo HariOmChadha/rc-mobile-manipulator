@@ -6,12 +6,10 @@ Pi, captures the laptop scene camera, and sends car commands to the laptop's ESP
 The leader arm is not opened. Ethernet/Wi-Fi selection uses the existing laptop
 configuration (`./robot ethernet` / `./robot wifi`).
 
-The PI Fleet adapter now follows the `pi_sdk.inference.PolicyClient` interface in
-`/home/czarhc/Downloads/message.txt`. Its configured endpoint is
+The PI Fleet adapter follows the partner-provided `pi_sdk.inference.PolicyClient` interface. Its configured endpoint is
 `wss://api.pi-fleet.com/v1/models/ckpt-1999-rc-arm-pick-ft-sd-v1b`.
 Hosted inference runs remotely; no local checkpoint download or Raspberry Pi
-reimage is needed. The actual PI SDK, API key, server camera metadata and training
-neutral values are still required for a live test. The public `pi-sdk` PyPI
+reimage is needed. The SDK connection was verified on September 27, 2026; see the integration results below. A fresh machine needs SDK credentials. Physical execution still needs verified training/stop neutral values. The public `pi-sdk` PyPI
 package is a reserved placeholder and cannot be installed.
 
 ## PI Fleet setup
@@ -54,8 +52,7 @@ The local file is ignored by Git. Mock runs continue using the generic config.
    send robot commands. It checks for a valid credential file before installation.
 
    `./robot setup-inference --check` reports local readiness without network access,
-   installation, or printing credential values. The auth helpers are installed
-   locally; private SDK installation still requires the onboarding key. The public
+   installation, or printing credential values. Private SDK installation requires the onboarding key. The public
    `pi-sdk` placeholder cannot substitute for the private package.
 
 3. Run `./robot infer --info`. This connects only to the model and prints its
@@ -136,7 +133,7 @@ This starts a separate simulated Pi, streams three synthetic cameras over TCP,
 and checks mock policy arm + DAC outputs. Logs go under `data/validation/`.
 It never opens physical USB devices. It does not benchmark π0.7 inference speed.
 
-## Configure once when the checkpoint arrives
+## Custom policy adapters
 
 Copy `config/inference.json` to `config/inference.local.json` (ignored by Git).
 For a custom runtime, set `adapter`, `checkpoint`, and the verified `neutral_steer` / `neutral_throttle`.

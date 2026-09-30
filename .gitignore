@@ -12,3 +12,28 @@ training_dataset/
 *.local.json
 .env
 .robot-token
+
+# Local environments, editor state, and machine-specific maintenance files.
+venv/
+env/
+.vscode/
+.idea/
+*.code-workspace
+work/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Credentials and private deployment archives. Keep only the blank example.
+.env.*
+!.env.example
+credentials/
+secrets/
+*service-account*.json
+*sa-key*.json
+*.pem
+*.key
+*.p12
+*.pfx
+pi-ready*.tar.gz*

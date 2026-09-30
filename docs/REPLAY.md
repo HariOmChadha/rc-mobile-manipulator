@@ -13,7 +13,7 @@ row. Repeated camera frames are preserved. This aligns the recorded views; it do
 not claim the USB cameras were hardware synchronized or actually captured 30 fps.
 The video includes phase, elapsed time and original steering/throttle DAC values.
 Render another episode with `./robot replay EPISODE_OR_DIRECTORY`; use `--output`
-to choose a new MP4 filename. Rendering requires PyAV, installed with the PI SDK.
+to choose a new MP4 filename. Rendering requires PyAV: `python -m pip install -r requirements-replay.txt`. No PI SDK or API key is needed to render video.
 
 ## Robot command replay
 

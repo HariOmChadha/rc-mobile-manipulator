@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RackHand — an arm on wheels</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,700&family=M+PLUS+Rounded+1c:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: oklch(0.96 0.02 88);
+      --ink: oklch(0.32 0.045 48);
+      --muted: oklch(0.48 0.04 55);
+      --tangerine: oklch(0.74 0.15 58);
+      --peel: oklch(0.86 0.09 78);
+      --leaf: oklch(0.58 0.09 150);
+      --berry: oklch(0.58 0.15 18);
+      --sky: oklch(0.9 0.035 220);
+      --line: oklch(0.32 0.045 48 / 0.16);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse 70% 50% at 12% -10%, oklch(0.92 0.05 70), transparent 60%),
+        radial-gradient(ellipse 40% 30% at 100% 0%, var(--sky), transparent 55%),
+        var(--paper);
+      font-family: "M PLUS Rounded 1c", sans-serif;
+      font-weight: 500;
+    }
+
+    main {
+      width: min(1040px, calc(100% - 2.4rem));
+      margin: 0 auto;
+      padding: clamp(1.6rem, 4vw, 3.2rem) 0 4rem;
+    }
+
+    .top {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: clamp(1.2rem, 3vw, 2.4rem);
+      align-items: center;
+    }
+
+    .kicker {
+      margin: 0 0 0.4rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-size: 0.72rem;
+      color: var(--berry);
+    }
+
+    h1 {
+      margin: 0;
+      font-family: Fraunces, serif;
+      font-weight: 560;
+      font-size: clamp(2.8rem, 5vw, 4.4rem);
+      line-height: 0.88;
+      letter-spacing: -0.03em;
+    }
+
+    h1 em {
+      font-style: italic;
+      font-weight: 700;
+      color: var(--berry);
+    }
+
+    .lede {
+      max-width: 34ch;
+      margin: 1rem 0 0;
+      font-size: 1.15rem;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .title-row {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .mascot {
+      width: 168px;
+      flex: none;
+      filter: drop-shadow(0 10px 0 oklch(0.32 0.045 48 / 0.06));
+    }
+
+    .wheel, .arm { transform-box: fill-box; }
+    .wheel { transform-origin: center; animation: roll 2.8s linear infinite; }
+    .arm { transform-origin: 0% 100%; animation: wave 2.6s ease-in-out infinite; }
+
+    @keyframes roll { to { transform: rotate(360deg); } }
+    @keyframes wave {
+      50% { transform: rotate(-8deg); }
+    }
+
+    .film {
+      margin: 0;
+    }
+
+    video {
+      display: block;
+      width: 100%;
+      border-radius: 1.4rem;
+      background: oklch(0.22 0.03 50);
+      box-shadow: 0 0 0 8px oklch(0.99 0.01 90), 0 22px 40px oklch(0.32 0.045 48 / 0.12);
+    }
+
+    figcaption {
+      margin-top: 0.7rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .pile {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.7rem 0.6rem;
+      margin: 1.6rem 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .pile li {
+      padding: 0.45rem 0.85rem;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      background: oklch(0.99 0.012 90);
+      font-size: 0.95rem;
+    }
+
+    .pile li:nth-child(1) { transform: rotate(-2deg); background: var(--peel); }
+    .pile li:nth-child(2) { transform: rotate(1.5deg); }
+    .pile li:nth-child(3) { transform: rotate(-1deg); background: oklch(0.9 0.04 150); }
+    .pile li:nth-child(4) { transform: rotate(2deg); background: oklch(0.9 0.045 20); }
+    .pile li:nth-child(5) { transform: rotate(-1.5deg); }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.8rem;
+      margin: 1.8rem 0 0;
+      padding: 1.2rem 0 0;
+      list-style: none;
+      border-top: 2px dashed var(--line);
+    }
+
+    .steps li {
+      padding-top: 0.2rem;
+    }
+
+    .steps span {
+      display: block;
+      font-family: Fraunces, serif;
+      font-size: 1.7rem;
+      font-weight: 560;
+      line-height: 1;
+    }
+
+    .steps small {
+      display: block;
+      margin-top: 0.25rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 2rem; }
+    .gallery figure { margin: 0; }
+    .gallery img { width: 100%; height: 440px; object-fit: cover; border-radius: 1rem; }
+    a { color: var(--berry); }
+    .status { line-height: 1.6; color: var(--muted); }
+
+    footer {
+      margin-top: 2.8rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    @media (max-width: 760px) {
+      .top { grid-template-columns: 1fr; }
+      .mascot { width: 140px; }
+      .gallery { grid-template-columns: 1fr; }
+      .gallery img { height: auto; }
+      .steps { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .wheel, .arm { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="top">
+      <div>
+        <p class="kicker">arm on wheels</p>
+        <div class="title-row">
+          <h1>Rack<em>Hand</em></h1>
+          <svg class="mascot" viewBox="0 0 360 220" aria-hidden="true">
+        <ellipse cx="180" cy="196" rx="120" ry="10" fill="oklch(0.32 0.045 48 / 0.08)"/>
+        <g class="arm">
+          <path d="M168 86 L210 48 L248 62" fill="none" stroke="oklch(0.45 0.06 150)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M236 54 L262 46 M236 70 L262 78" fill="none" stroke="oklch(0.4 0.05 150)" stroke-width="6" stroke-linecap="round"/>
+          <circle cx="168" cy="86" r="7" fill="oklch(0.4 0.05 150)"/>
+        </g>
+        <rect x="78" y="96" width="176" height="62" rx="22" fill="oklch(0.74 0.15 58)"/>
+        <rect x="108" y="108" width="54" height="28" rx="8" fill="oklch(0.93 0.03 90)"/>
+        <circle cx="250" cy="118" r="7" fill="oklch(0.32 0.045 48)"/>
+        <circle cx="250" cy="118" r="3" fill="oklch(0.9 0.04 220)"/>
+        <g class="wheel">
+          <circle cx="124" cy="164" r="22" fill="oklch(0.32 0.045 48)"/>
+          <circle cx="124" cy="164" r="8" fill="oklch(0.86 0.09 78)"/>
+        </g>
+        <g class="wheel">
+          <circle cx="214" cy="164" r="22" fill="oklch(0.32 0.045 48)"/>
+          <circle cx="214" cy="164" r="8" fill="oklch(0.86 0.09 78)"/>
+        </g>
+        <circle cx="258" cy="58" r="6" fill="oklch(0.58 0.15 18)"/>
+          </svg>
+        </div>
+        <p class="lede">An SO-101 arm on an RC car. Drive it with a controller, guide its arm, and record the scene, wrist, and car views together.</p>
+        <ul class="pile">
+          <li>arm riding a car</li>
+          <li>three cameras</li>
+          <li>sticks turn the wheels</li>
+          <li>a leader arm for the hand</li>
+          <li>replays recorded commands</li>
+        </ul>
+      </div>
+
+    <figure class="film">
+      <video controls playsinline preload="metadata" poster="assets/demo-poster.jpg" src="assets/demo.mp4" aria-label="RackHand recorded demonstration: scene, wrist and car"></video>
+      <figcaption>40-second recorded demonstration · scene, wrist, and car</figcaption>
+    </figure>
+    </div>
+
+    <ol class="steps">
+      <li><span>drive</span><small>across the floor</small></li>
+      <li><span>pick</span><small>it up</small></li>
+      <li><span>carry</span><small>it over</small></li>
+      <li><span>set</span><small>it down</small></li>
+    </ol>
+
+    <div class="gallery">
+      <figure><img src="assets/rackhand-hardware.jpg" alt="SO-101 arm, Pi and cameras mounted on the RackHand chassis" loading="lazy"><figcaption>The follower arm and onboard electronics.</figcaption></figure>
+      <figure><img src="assets/rackhand-side.jpg" alt="Side view of the RackHand arm and gripper above the RC car" loading="lazy"><figcaption>A mobile platform for collecting manipulation demonstrations.</figcaption></figure>
+    </div>
+    <p class="status">Recording and synchronized video replay are implemented. Hosted policy inference has passed a single non-actuating request; autonomous task success and physical command replay remain unverified.</p>
+    <p><a href="https://github.com/HariOmChadha/RackHand">Code and setup on GitHub</a> · <a href="assets/demo.mp4">Download the full demo</a></p>
+    <footer>SO-101 on an RC car · eight numbers a step: six joints, steer, throttle</footer>
+  </main>
+</body>
+</html>

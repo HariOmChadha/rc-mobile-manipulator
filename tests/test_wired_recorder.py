@@ -11,7 +11,7 @@ from mobile_robot.protocol import JOINTS, parse_rc_line
 
 @pytest.fixture
 def recorder():
-    spec = importlib.util.spec_from_file_location("wired", Path("laptop_unified/record_episode.py"))
+    spec = importlib.util.spec_from_file_location("wired", Path("scripts/record_wired.py"))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

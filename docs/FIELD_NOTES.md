@@ -1,4 +1,6 @@
-# Prepared setup
+# Field notes — September 26–27, 2026
+
+These are historical deployment notes for the original workstation and Pi. Addresses, paths, test counts, and camera assignments below describe that session; they are not current readiness guarantees. New installations should follow [SETUP.md](SETUP.md).
 
 Camera swaps, INNO-MAKER profiles and comparison commands are documented in
 [CAMERA_EXPERIMENTS.md](CAMERA_EXPERIMENTS.md).
@@ -202,4 +204,4 @@ Rebuild the Pi bundle after any code or Pi configuration changes:
 python3 scripts/package_pi.py
 ```
 
-See `README.md` for full calibration instructions, dataset semantics and limits.
+See [SETUP.md](SETUP.md) for calibration instructions, dataset semantics and limits.

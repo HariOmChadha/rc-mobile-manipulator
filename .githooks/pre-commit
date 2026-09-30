@@ -1,0 +1,4 @@
+#!/bin/sh
+# Check the exact index contents before creating a commit.
+set -eu
+exec python3 scripts/check_secrets.py --staged

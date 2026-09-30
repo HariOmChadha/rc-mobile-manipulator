@@ -1,0 +1,2 @@
+# Standalone video rendering; no private inference SDK required.
+av>=16.1,<17
